@@ -1,0 +1,6 @@
+{
+  "name": "Circle OCR",
+  "description": "Circle to Search styled OCR lens app with gesture text selection, circular image crop & share, and quick share target integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
