@@ -10,35 +10,22 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ShortText
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.DocumentScanner
-import androidx.compose.material.icons.filled.GTranslate
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,14 +34,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.model.CropSelection
 import com.example.model.ShareTarget
 import com.example.model.TextSelectionState
 
+/**
+ * Clean & minimal floating text action toolbar.
+ */
 @Composable
 fun TextSelectionPopup(
     modifier: Modifier = Modifier,
@@ -63,7 +50,6 @@ fun TextSelectionPopup(
     onCopy: () -> Unit,
     onShareGeneral: () -> Unit,
     onShareDirect: (ShareTarget) -> Unit,
-    onChangeTarget: () -> Unit,
     onClear: () -> Unit
 ) {
     AnimatedVisibility(
@@ -71,141 +57,114 @@ fun TextSelectionPopup(
         enter = fadeIn() + slideInVertically(initialOffsetY = { 30 }, animationSpec = spring()),
         exit = fadeOut() + slideOutVertically(targetOffsetY = { 30 })
     ) {
-        val fullText = textSelection?.fullText ?: ""
-
         Surface(
             modifier = modifier
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .widthIn(max = 520.dp)
-                .shadow(elevation = 16.dp, shape = RoundedCornerShape(22.dp))
+                .shadow(elevation = 16.dp, shape = CircleShape)
                 .border(
                     width = 1.dp,
                     brush = Brush.horizontalGradient(
                         listOf(Color(0xFF38BDF8), Color(0xFF818CF8))
                     ),
-                    shape = RoundedCornerShape(22.dp)
+                    shape = CircleShape
                 ),
-            shape = RoundedCornerShape(22.dp),
-            color = Color(0xF50F172A),
-            tonalElevation = 8.dp
+            shape = CircleShape,
+            color = Color(0xF20F172A),
+            tonalElevation = 10.dp
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Top row: text preview + dismiss
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                // Copy Text Button
+                IconButton(
+                    onClick = onCopy,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E293B))
+                        .testTag("copy_text_button")
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "テキストをコピー",
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Share Text Button (General)
+                IconButton(
+                    onClick = onShareGeneral,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2563EB))
+                        .testTag("share_text_general_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "テキストを共有",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Last Direct Share App
+                if (lastShareTarget != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF1E293B))
+                            .border(1.dp, Color(0xFF334155), CircleShape)
+                            .clickable { onShareDirect(lastShareTarget) }
+                            .testTag("direct_share_text_button"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .background(Color(0xFF2563EB), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        if (lastShareTarget.iconBitmap != null) {
+                            Image(
+                                bitmap = lastShareTarget.iconBitmap,
+                                contentDescription = "${lastShareTarget.appName} に送信",
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                            )
+                        } else {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ShortText,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "${lastShareTarget.appName} に送信",
+                                tint = Color(0xFF67E8F9),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = fullText,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = Color(0xFFF1F5F9),
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onClear,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .testTag("clear_text_selection_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "選択解除",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(16.dp)
-                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Actions: Copy | Share | [Direct App Button] | App Switcher
-                Row(
+                // Clear Button
+                IconButton(
+                    onClick = onClear,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1AFFFFFF))
+                        .testTag("clear_text_selection_button")
                 ) {
-                    // Copy
-                    ActionButton(
-                        icon = Icons.Default.ContentCopy,
-                        label = "コピー",
-                        backgroundColor = Color(0xFF1E293B),
-                        contentColor = Color(0xFF67E8F9),
-                        testTag = "copy_text_button",
-                        onClick = onCopy
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "選択解除",
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(18.dp)
                     )
-
-                    // Share General
-                    ActionButton(
-                        icon = Icons.Default.Share,
-                        label = "共有",
-                        backgroundColor = Color(0xFF1E293B),
-                        contentColor = Color(0xFFE2E8F0),
-                        testTag = "share_text_general_button",
-                        onClick = onShareGeneral
-                    )
-
-                    // Last Direct App (Beside Share)
-                    if (lastShareTarget != null) {
-                        DirectShareTargetButton(
-                            target = lastShareTarget,
-                            testTag = "direct_share_text_button",
-                            onClick = { onShareDirect(lastShareTarget) }
-                        )
-                    }
-
-                    // App Switcher
-                    IconButton(
-                        onClick = onChangeTarget,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1E293B))
-                            .testTag("change_share_target_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.SwapHoriz,
-                            contentDescription = "共有先アプリを変更",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Clean & minimal floating crop action toolbar.
+ */
 @Composable
 fun CropSelectionPopup(
     modifier: Modifier = Modifier,
@@ -215,7 +174,6 @@ fun CropSelectionPopup(
     onShareImageDirect: (ShareTarget) -> Unit,
     onCopyImage: () -> Unit,
     onOcrCrop: () -> Unit,
-    onChangeTarget: () -> Unit,
     onClear: () -> Unit
 ) {
     AnimatedVisibility(
@@ -225,250 +183,121 @@ fun CropSelectionPopup(
     ) {
         Surface(
             modifier = modifier
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-                .widthIn(max = 540.dp)
-                .shadow(elevation = 16.dp, shape = RoundedCornerShape(22.dp))
+                .shadow(elevation = 16.dp, shape = CircleShape)
                 .border(
-                    width = 1.2.dp,
+                    width = 1.dp,
                     brush = Brush.horizontalGradient(
-                        listOf(Color(0xFF38BDF8), Color(0xFFF472B6), Color(0xFFFBBF24))
+                        listOf(Color(0xFF38BDF8), Color(0xFFF472B6))
                     ),
-                    shape = RoundedCornerShape(22.dp)
+                    shape = CircleShape
                 ),
-            shape = RoundedCornerShape(22.dp),
-            color = Color(0xF50F172A),
-            tonalElevation = 8.dp
+            shape = CircleShape,
+            color = Color(0xF20F172A),
+            tonalElevation = 10.dp
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Top row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                // OCR / Extract text inside crop
+                IconButton(
+                    onClick = onOcrCrop,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E293B))
+                        .testTag("ocr_crop_button")
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(22.dp)
-                                .background(Color(0xFF0284C7), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Crop,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "切り抜き枠を選択中",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onClear,
-                        modifier = Modifier
-                            .size(26.dp)
-                            .testTag("clear_crop_selection_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "切り抜き解除",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.DocumentScanner,
+                        contentDescription = "文字を抽出",
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Actions: Extract Text | Copy Image | Share Image | [Direct App] | Change Target
-                Row(
+                // Copy Image
+                IconButton(
+                    onClick = onCopyImage,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF1E293B))
+                        .testTag("copy_crop_image_button")
                 ) {
-                    // Extract Text
-                    ActionButton(
-                        icon = Icons.Default.DocumentScanner,
-                        label = "文字抽出",
-                        backgroundColor = Color(0xFF1E293B),
-                        contentColor = Color(0xFFFBBF24),
-                        testTag = "ocr_crop_button",
-                        onClick = onOcrCrop
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "画像をコピー",
+                        tint = Color(0xFFE2E8F0),
+                        modifier = Modifier.size(20.dp)
                     )
+                }
 
-                    // Copy Image
-                    ActionButton(
-                        icon = Icons.Default.ContentCopy,
-                        label = "コピー",
-                        backgroundColor = Color(0xFF1E293B),
-                        contentColor = Color(0xFF67E8F9),
-                        testTag = "copy_crop_image_button",
-                        onClick = onCopyImage
+                // Share Image (General)
+                IconButton(
+                    onClick = onShareImageGeneral,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2563EB))
+                        .testTag("share_crop_general_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = "画像を共有",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
+                }
 
-                    // Share Image
-                    ActionButton(
-                        icon = Icons.Default.Share,
-                        label = "共有",
-                        backgroundColor = Color(0xFF0284C7),
-                        contentColor = Color.White,
-                        testTag = "share_crop_general_button",
-                        onClick = onShareImageGeneral
-                    )
-
-                    // Last Direct App Button (Beside Share)
-                    if (lastShareTarget != null) {
-                        DirectShareTargetButton(
-                            target = lastShareTarget,
-                            testTag = "direct_share_crop_button",
-                            onClick = { onShareImageDirect(lastShareTarget) }
-                        )
-                    }
-
-                    // App Switcher
-                    IconButton(
-                        onClick = onChangeTarget,
+                // Last Direct Share App
+                if (lastShareTarget != null) {
+                    Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF1E293B))
-                            .testTag("change_image_target_button")
+                            .border(1.dp, Color(0xFF334155), CircleShape)
+                            .clickable { onShareImageDirect(lastShareTarget) }
+                            .testTag("direct_share_crop_button"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.SwapHoriz,
-                            contentDescription = "共有先アプリを変更",
-                            tint = Color(0xFF94A3B8),
-                            modifier = Modifier.size(18.dp)
-                        )
+                        if (lastShareTarget.iconBitmap != null) {
+                            Image(
+                                bitmap = lastShareTarget.iconBitmap,
+                                contentDescription = "${lastShareTarget.appName} に画像を送信",
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "${lastShareTarget.appName} に画像を送信",
+                                tint = Color(0xFF67E8F9),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
-            }
-        }
-    }
-}
 
-@Composable
-private fun ActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    backgroundColor: Color,
-    contentColor: Color,
-    testTag: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .testTag(testTag),
-        shape = RoundedCornerShape(12.dp),
-        color = backgroundColor
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(5.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    color = contentColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
-            )
-        }
-    }
-}
-
-@Composable
-private fun DirectShareTargetButton(
-    target: ShareTarget,
-    testTag: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .border(
-                1.dp,
-                Brush.horizontalGradient(listOf(Color(0xFF38BDF8), Color(0xFF818CF8))),
-                RoundedCornerShape(12.dp)
-            )
-            .testTag(testTag),
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF1E293B)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (target.iconBitmap != null) {
-                Image(
-                    bitmap = target.iconBitmap,
-                    contentDescription = target.appName,
+                // Clear Button
+                IconButton(
+                    onClick = onClear,
                     modifier = Modifier
-                        .size(22.dp)
-                        .clip(RoundedCornerShape(5.dp))
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .background(Color(0xFF3B82F6), RoundedCornerShape(5.dp)),
-                    contentAlignment = Alignment.Center
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1AFFFFFF))
+                        .testTag("clear_crop_selection_button")
                 ) {
-                    Text(
-                        text = target.appName.take(1),
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "選択解除",
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
-            }
-            Spacer(modifier = Modifier.width(6.dp))
-            Column {
-                Text(
-                    text = "送信",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        color = Color(0xFF38BDF8),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-                Text(
-                    text = target.appName,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 70.dp)
-                )
             }
         }
     }

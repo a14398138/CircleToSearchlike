@@ -15,6 +15,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import kotlin.coroutines.resume
+import kotlin.math.max
+import kotlin.math.min
 
 class OcrManager {
 
@@ -42,97 +44,58 @@ class OcrManager {
                     var globalTokenIdx = 0
                     var globalLineIdx = 0
 
-                    // Sort text blocks in natural vertical reading order (top to bottom, left to right)
-                    val sortedBlocks = visionText.textBlocks.sortedWith(
-                        compareBy<Text.TextBlock> { (it.boundingBox?.top ?: 0) / 40 }
-                            .thenBy { it.boundingBox?.left ?: 0 }
-                    )
+                    // 1. Gather all non-empty lines from all text blocks
+                    val rawLines = visionText.textBlocks.flatMap { it.lines }
+                        .filter { it.text.isNotBlank() }
 
-                    var blockIdx = 0
-                    for (block in sortedBlocks) {
-                        // Sort lines within block top to bottom
-                        val sortedLines = block.lines.sortedBy { it.boundingBox?.top ?: 0 }
+                    // 2. Sort all lines strictly into top-to-bottom reading order
+                    val sortedLines = sortLinesInReadingOrder(rawLines)
 
-                        for (line in sortedLines) {
-                            val lineBox = line.boundingBox ?: block.boundingBox ?: Rect(0, 0, 100, 50)
-                            val currentLineIdx = globalLineIdx++
-                            val tokens = mutableListOf<OcrToken>()
-                            var tokenInLineIdx = 0
+                    for (line in sortedLines) {
+                        val lineBox = line.boundingBox ?: Rect(0, 0, 100, 50)
+                        val currentLineIdx = globalLineIdx++
+                        val tokens = mutableListOf<OcrToken>()
+                        var tokenInLineIdx = 0
 
-                            val elements = line.elements.sortedBy { it.boundingBox?.left ?: 0 }
-                            if (elements.isNotEmpty()) {
-                                for (element in elements) {
-                                    val elementBox = element.boundingBox ?: lineBox
-                                    val elementText = element.text
-                                    val symbols = try { element.symbols } catch (e: Throwable) { emptyList<Text.Symbol>() }
+                        val elements = line.elements.sortedBy { it.boundingBox?.left ?: 0 }
+                        if (elements.isNotEmpty()) {
+                            for (element in elements) {
+                                val elementBox = element.boundingBox ?: lineBox
+                                val elementText = element.text
+                                val symbols = try {
+                                    element.symbols.sortedBy { it.boundingBox?.left ?: 0 }
+                                } catch (e: Throwable) {
+                                    emptyList<Text.Symbol>()
+                                }
 
-                                    if (symbols.isNotEmpty() && containsJapaneseOrMixed(elementText)) {
-                                        // Use ML Kit direct Symbol bounding boxes for highest precision
-                                        for (symbol in symbols) {
-                                            val symBox = symbol.boundingBox ?: elementBox
-                                            val symText = symbol.text
-                                            tokens.add(
-                                                OcrToken(
-                                                    id = UUID.randomUUID().toString(),
-                                                    text = symText,
-                                                    boundingBox = symBox,
-                                                    lineIndex = currentLineIdx,
-                                                    tokenIndex = tokenInLineIdx++,
-                                                    globalIndex = globalTokenIdx++,
-                                                    isJapaneseOrCjk = containsJapanese(symText)
-                                                )
-                                            )
-                                        }
-                                    } else if (containsJapanese(elementText)) {
-                                        // Japanese / CJK fallback when symbols not directly populated:
-                                        // Decompose into individual character tokens with proportional boxes
-                                        val charCount = elementText.length
-                                        val elemW = elementBox.width()
-
-                                        for (i in 0 until charCount) {
-                                            val ch = elementText[i].toString()
-                                            val left = elementBox.left + (elemW * i / charCount)
-                                            val right = elementBox.left + (elemW * (i + 1) / charCount)
-                                            val charBox = Rect(left, elementBox.top, right, elementBox.bottom)
-
-                                            tokens.add(
-                                                OcrToken(
-                                                    id = UUID.randomUUID().toString(),
-                                                    text = ch,
-                                                    boundingBox = charBox,
-                                                    lineIndex = currentLineIdx,
-                                                    tokenIndex = tokenInLineIdx++,
-                                                    globalIndex = globalTokenIdx++,
-                                                    isJapaneseOrCjk = true
-                                                )
-                                            )
-                                        }
-                                    } else {
-                                        // Latin / English / Number / Symbol: treat as word token
+                                if (symbols.isNotEmpty() && containsJapaneseOrMixed(elementText)) {
+                                    // Use ML Kit direct Symbol bounding boxes for highest precision
+                                    for (symbol in symbols) {
+                                        val symBox = symbol.boundingBox ?: elementBox
+                                        val symText = symbol.text
                                         tokens.add(
                                             OcrToken(
                                                 id = UUID.randomUUID().toString(),
-                                                text = elementText,
-                                                boundingBox = elementBox,
+                                                text = symText,
+                                                boundingBox = symBox,
                                                 lineIndex = currentLineIdx,
                                                 tokenIndex = tokenInLineIdx++,
                                                 globalIndex = globalTokenIdx++,
-                                                isJapaneseOrCjk = false
+                                                isJapaneseOrCjk = containsJapanese(symText)
                                             )
                                         )
                                     }
-                                }
-                            } else {
-                                // Direct line text fallback
-                                val lineText = line.text
-                                if (containsJapanese(lineText)) {
-                                    val charCount = lineText.length
-                                    val lineW = lineBox.width()
+                                } else if (containsJapanese(elementText)) {
+                                    // Japanese / CJK fallback when symbols not directly populated
+                                    val charCount = elementText.length
+                                    val elemW = elementBox.width()
+
                                     for (i in 0 until charCount) {
-                                        val ch = lineText[i].toString()
-                                        val left = lineBox.left + (lineW * i / charCount)
-                                        val right = lineBox.left + (lineW * (i + 1) / charCount)
-                                        val charBox = Rect(left, lineBox.top, right, lineBox.bottom)
+                                        val ch = elementText[i].toString()
+                                        val left = elementBox.left + (elemW * i / charCount)
+                                        val right = elementBox.left + (elemW * (i + 1) / charCount)
+                                        val charBox = Rect(left, elementBox.top, right, elementBox.bottom)
+
                                         tokens.add(
                                             OcrToken(
                                                 id = UUID.randomUUID().toString(),
@@ -146,48 +109,84 @@ class OcrManager {
                                         )
                                     }
                                 } else {
-                                    val words = lineText.split(Regex("\\s+")).filter { it.isNotEmpty() }
-                                    val totalLen = lineText.length.coerceAtLeast(1)
-                                    var currentOffset = 0
-                                    for (word in words) {
-                                        val startIdx = lineText.indexOf(word, currentOffset).coerceAtLeast(0)
-                                        val endIdx = startIdx + word.length
-                                        currentOffset = endIdx
-
-                                        val left = lineBox.left + (lineBox.width() * startIdx / totalLen)
-                                        val right = lineBox.left + (lineBox.width() * endIdx / totalLen)
-                                        val wordBox = Rect(left, lineBox.top, right, lineBox.bottom)
-
-                                        tokens.add(
-                                            OcrToken(
-                                                id = UUID.randomUUID().toString(),
-                                                text = word,
-                                                boundingBox = wordBox,
-                                                lineIndex = currentLineIdx,
-                                                tokenIndex = tokenInLineIdx++,
-                                                globalIndex = globalTokenIdx++,
-                                                isJapaneseOrCjk = false
-                                            )
+                                    // Latin / English / Number / Symbol: treat as word token
+                                    tokens.add(
+                                        OcrToken(
+                                            id = UUID.randomUUID().toString(),
+                                            text = elementText,
+                                            boundingBox = elementBox,
+                                            lineIndex = currentLineIdx,
+                                            tokenIndex = tokenInLineIdx++,
+                                            globalIndex = globalTokenIdx++,
+                                            isJapaneseOrCjk = false
                                         )
-                                    }
+                                    )
                                 }
                             }
-
-                            if (tokens.isNotEmpty()) {
-                                items.add(
-                                    OcrTextItem(
-                                        id = UUID.randomUUID().toString(),
-                                        text = line.text,
-                                        boundingBox = lineBox,
-                                        lineIndex = currentLineIdx,
-                                        blockIndex = blockIdx,
-                                        tokens = tokens,
-                                        isSelected = false
+                        } else {
+                            // Direct line text fallback
+                            val lineText = line.text
+                            if (containsJapanese(lineText)) {
+                                val charCount = lineText.length
+                                val lineW = lineBox.width()
+                                for (i in 0 until charCount) {
+                                    val ch = lineText[i].toString()
+                                    val left = lineBox.left + (lineW * i / charCount)
+                                    val right = lineBox.left + (lineW * (i + 1) / charCount)
+                                    val charBox = Rect(left, lineBox.top, right, lineBox.bottom)
+                                    tokens.add(
+                                        OcrToken(
+                                            id = UUID.randomUUID().toString(),
+                                            text = ch,
+                                            boundingBox = charBox,
+                                            lineIndex = currentLineIdx,
+                                            tokenIndex = tokenInLineIdx++,
+                                            globalIndex = globalTokenIdx++,
+                                            isJapaneseOrCjk = true
+                                        )
                                     )
-                                )
+                                }
+                            } else {
+                                val words = lineText.split(Regex("\\s+")).filter { it.isNotEmpty() }
+                                val totalLen = lineText.length.coerceAtLeast(1)
+                                var currentOffset = 0
+                                for (word in words) {
+                                    val startIdx = lineText.indexOf(word, currentOffset).coerceAtLeast(0)
+                                    val endIdx = startIdx + word.length
+                                    currentOffset = endIdx
+
+                                    val left = lineBox.left + (lineBox.width() * startIdx / totalLen)
+                                    val right = lineBox.left + (lineBox.width() * endIdx / totalLen)
+                                    val wordBox = Rect(left, lineBox.top, right, lineBox.bottom)
+
+                                    tokens.add(
+                                        OcrToken(
+                                            id = UUID.randomUUID().toString(),
+                                            text = word,
+                                            boundingBox = wordBox,
+                                            lineIndex = currentLineIdx,
+                                            tokenIndex = tokenInLineIdx++,
+                                            globalIndex = globalTokenIdx++,
+                                            isJapaneseOrCjk = false
+                                        )
+                                    )
+                                }
                             }
                         }
-                        blockIdx++
+
+                        if (tokens.isNotEmpty()) {
+                            items.add(
+                                OcrTextItem(
+                                    id = UUID.randomUUID().toString(),
+                                    text = line.text,
+                                    boundingBox = lineBox,
+                                    lineIndex = currentLineIdx,
+                                    blockIndex = 0,
+                                    tokens = tokens,
+                                    isSelected = false
+                                )
+                            )
+                        }
                     }
                     continuation.resume(items)
                 }
@@ -196,6 +195,66 @@ class OcrManager {
                     continuation.resume(emptyList())
                 }
         }
+    }
+
+    /**
+     * Clusters lines into horizontal rows and sorts rows strictly top-to-bottom,
+     * and lines within each row left-to-right.
+     * Prevents ML Kit block fragmentations from inverting vertical line reading order.
+     */
+    private fun sortLinesInReadingOrder(lines: List<Text.Line>): List<Text.Line> {
+        if (lines.size <= 1) return lines
+
+        // 1. Initial sort by top coordinate, then by left coordinate
+        val sortedByTop = lines.sortedWith(
+            compareBy<Text.Line> { it.boundingBox?.top ?: 0 }
+                .thenBy { it.boundingBox?.left ?: 0 }
+        )
+
+        val rows = mutableListOf<MutableList<Text.Line>>()
+
+        for (line in sortedByTop) {
+            val box = line.boundingBox ?: Rect(0, 0, 0, 0)
+            val top = box.top
+            val bottom = box.bottom
+            val height = (bottom - top).coerceAtLeast(1)
+            val centerY = (top + bottom) / 2
+
+            var matchedRow: MutableList<Text.Line>? = null
+
+            for (row in rows) {
+                val rTop = row.minOf { it.boundingBox?.top ?: top }
+                val rBottom = row.maxOf { it.boundingBox?.bottom ?: bottom }
+                val rHeight = (rBottom - rTop).coerceAtLeast(1)
+
+                val overlapY = max(0, min(bottom, rBottom) - max(top, rTop))
+                val overlapRatio = overlapY.toFloat() / min(height, rHeight)
+
+                // Overlap by at least 40% of line height or vertical center inside row span
+                if (overlapRatio >= 0.40f || (centerY in rTop..rBottom)) {
+                    matchedRow = row
+                    break
+                }
+            }
+
+            if (matchedRow != null) {
+                matchedRow.add(line)
+            } else {
+                rows.add(mutableListOf(line))
+            }
+        }
+
+        // 2. Sort rows top-to-bottom by average top coordinate
+        rows.sortBy { row ->
+            row.map { it.boundingBox?.top ?: 0 }.average()
+        }
+
+        // 3. Sort lines within each row left-to-right
+        for (row in rows) {
+            row.sortBy { it.boundingBox?.left ?: 0 }
+        }
+
+        return rows.flatten()
     }
 
     private fun containsJapaneseOrMixed(text: String): Boolean {

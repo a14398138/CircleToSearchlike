@@ -23,6 +23,7 @@ import com.example.util.CircleLensScreenshotHolder
 import com.example.util.ScreenshotHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,6 +58,8 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _uiState = MutableStateFlow(CircleLensUiState())
     val uiState: StateFlow<CircleLensUiState> = _uiState.asStateFlow()
+
+    val closeAppEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 2)
 
     private var activeLoadJob: Job? = null
     private var isRealBitmapLoaded: Boolean = false
@@ -317,14 +320,18 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
             imageRectOnDisplay.top + lastToken.boundingBox.bottom * scaleY
         )
 
-        // Concatenate text intelligently (add space between English words, no space for Japanese chars)
+        // Concatenate text intelligently (add newline between lines, space between English words, no space for Japanese chars)
         val sb = StringBuilder()
+        var lastLineIdx = -1
         for (i in selected.indices) {
             val token = selected[i]
-            sb.append(token.text)
-            if (!token.isJapaneseOrCjk && i < selected.size - 1 && !selected[i + 1].isJapaneseOrCjk) {
+            if (lastLineIdx != -1 && token.lineIndex != lastLineIdx) {
+                sb.append("\n")
+            } else if (i > 0 && !selected[i - 1].isJapaneseOrCjk && !token.isJapaneseOrCjk) {
                 sb.append(" ")
             }
+            sb.append(token.text)
+            lastLineIdx = token.lineIndex
         }
 
         return TextSelectionState(
@@ -477,6 +484,9 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 shareManager.shareTextGeneral(text)
             }
+            viewModelScope.launch {
+                closeAppEvent.emit(Unit)
+            }
         }
     }
 
@@ -489,6 +499,7 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     shareManager.shareImageGeneral(cropBmp, "切り抜き画像を共有")
                 }
+                closeAppEvent.emit(Unit)
             }
         }
     }
@@ -498,6 +509,7 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
         if (cropBmp != null) {
             viewModelScope.launch {
                 shareManager.copyImageToClipboard(cropBmp)
+                _uiState.value = _uiState.value.copy(feedbackMessage = "画像をクリップボードにコピーしました")
             }
         }
     }
@@ -544,6 +556,7 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 shareManager.shareImageGeneral(fullBmp, "画面全体を共有")
             }
+            closeAppEvent.emit(Unit)
         }
     }
 

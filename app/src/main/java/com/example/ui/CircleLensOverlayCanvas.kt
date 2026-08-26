@@ -322,6 +322,31 @@ fun CircleLensOverlayCanvas(
                 size = Size(destWidth, destHeight)
             )
 
+            // Animated glowing perimeter border to clearly indicate overlay mode is active
+            val glowBrush = Brush.sweepGradient(
+                colors = listOf(
+                    Color(0xFF38BDF8),
+                    Color(0xFF818CF8),
+                    Color(0xFFF472B6),
+                    Color(0xFF38BDF8)
+                ),
+                center = Offset(canvasWidth / 2f, canvasHeight / 2f)
+            )
+            // Outer glow line
+            drawRect(
+                brush = glowBrush,
+                topLeft = Offset(destLeft + 1f, destTop + 1f),
+                size = Size(destWidth - 2f, destHeight - 2f),
+                style = Stroke(width = 3.5f)
+            )
+            // Inner soft ambient edge line
+            drawRect(
+                color = Color(0x3338BDF8),
+                topLeft = Offset(destLeft + 4f, destTop + 4f),
+                size = Size(destWidth - 8f, destHeight - 8f),
+                style = Stroke(width = 2f)
+            )
+
             val scaleX = destWidth / bmpWidth
             val scaleY = destHeight / bmpHeight
 

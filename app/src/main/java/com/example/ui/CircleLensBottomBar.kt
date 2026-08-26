@@ -8,18 +8,15 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,8 +46,7 @@ fun CircleLensBottomBar(
     lastShareTarget: ShareTarget?,
     onSelectAllText: () -> Unit,
     onShareEntireScreenGeneral: () -> Unit,
-    onShareEntireScreenDirect: (ShareTarget) -> Unit,
-    onChangeShareTarget: () -> Unit
+    onShareEntireScreenDirect: (ShareTarget) -> Unit
 ) {
     // Local draggable offset for moving the toolbar anywhere comfortably
     var offsetX by remember { mutableFloatStateOf(0f) }
@@ -179,23 +175,6 @@ fun CircleLensBottomBar(
                         )
                     }
                 }
-            }
-
-            // 4. アプリ選択・変更ボタン
-            IconButton(
-                onClick = onChangeShareTarget,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x1AFFFFFF))
-                    .testTag("change_share_target_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SwapHoriz,
-                    contentDescription = "共有先アプリを選択",
-                    tint = Color(0xFF94A3B8),
-                    modifier = Modifier.size(18.dp)
-                )
             }
         }
     }

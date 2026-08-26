@@ -10,10 +10,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.ui.CircleLensScreen
 import com.example.ui.CircleLensViewModel
 import com.example.ui.theme.MyApplicationTheme
 import com.example.util.CircleLensScreenshotHolder
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -24,9 +28,20 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleIncomingIntent(intent)
 
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.closeAppEvent.collect {
+                    finish()
+                }
+            }
+        }
+
         setContent {
             MyApplicationTheme(darkTheme = true) {
-                CircleLensScreen(viewModel = viewModel)
+                CircleLensScreen(
+                    viewModel = viewModel,
+                    onCloseApp = { finish() }
+                )
             }
         }
     }

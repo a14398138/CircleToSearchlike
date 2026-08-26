@@ -2,6 +2,8 @@ package com.example.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,11 +18,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -29,6 +35,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,6 +56,7 @@ fun AssistHelpDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val hasOverlayPermission = Settings.canDrawOverlays(context)
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -69,6 +77,7 @@ fun AssistHelpDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp)
             ) {
                 // Header
@@ -93,11 +102,11 @@ fun AssistHelpDialog(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "アシスタント連携設定",
+                            text = "アシスタント＆重ねて表示設定",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
+                                fontSize = 15.sp
                             )
                         )
                     }
@@ -115,38 +124,73 @@ fun AssistHelpDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = Color(0x33334155))
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "ホームボタン長押しや画面下部からのスワイプで、いつでも画面のOCRと円囲み切り抜きを呼び出せます。",
+                    text = "ホーム長押しやアシスタント操作で、他のアプリの上に重ねて画面OCR・円切り抜きを起動できます。",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         color = Color(0xFFCBD5E1),
                         fontSize = 13.sp,
-                        lineHeight = 19.sp
+                        lineHeight = 18.sp
                     )
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Step 1
+                // Step 1: Assist setting
                 HelpStepItem(
                     step = "1",
-                    title = "デフォルトのアシスタントアプリに設定",
-                    desc = "端末の「設定」➜「アプリ」➜「デフォルトのアプリ」➜「デジタルアシスタントアプリ」で「Circle OCR」を選択します。"
+                    title = "デジタルアシスタントに設定",
+                    desc = "「設定」➜「デフォルトのアプリ」➜「デジタルアシスタントアプリ」で本アプリを選択し、「画面のテキスト/スクショ」をONにします。"
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Step 2
+                // Step 2: Overlay permission
                 HelpStepItem(
                     step = "2",
-                    title = "画面コンテキストとスクショを許可",
-                    desc = "アシスタント設定内の「画面のテキストを使用」「スクリーンショットを使用」をオンにしてください。"
+                    title = "他のアプリの上に重ねて表示を許可",
+                    desc = if (hasOverlayPermission) "✅ 権限が許可されています" else "他のアプリ起動中にスムーズにオーバーレイ表示するために許可してください。"
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Overlay Permission Button
+                if (!hasOverlayPermission) {
+                    Button(
+                        onClick = {
+                            openOverlayPermissionSettings(context)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("open_overlay_settings_button"),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "他のアプリの上に重ねて表示を許可",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // Button to launch default assist settings
                 Button(
@@ -155,7 +199,7 @@ fun AssistHelpDialog(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp)
+                        .height(44.dp)
                         .testTag("open_assist_settings_button"),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
                     shape = RoundedCornerShape(12.dp)
@@ -168,7 +212,7 @@ fun AssistHelpDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "アシスタント設定を開く",
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -185,13 +229,13 @@ fun AssistHelpDialog(
                     onClick = onDismiss,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .height(42.dp)
                         .testTag("dismiss_wizard_button"),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = "はじめる",
+                        text = "閉じる",
                         fontSize = 14.sp,
                         color = Color(0xFF38BDF8),
                         fontWeight = FontWeight.SemiBold
@@ -245,6 +289,27 @@ private fun HelpStepItem(
                     lineHeight = 16.sp
                 )
             )
+        }
+    }
+}
+
+private fun openOverlayPermissionSettings(context: Context) {
+    try {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (e: Throwable) {
+        try {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e2: Throwable) {
+            // Ignored
         }
     }
 }

@@ -23,36 +23,27 @@ class CircleVoiceSessionService : VoiceInteractionSessionService() {
 class CircleVoiceInteractionSession(context: Context) : VoiceInteractionSession(context) {
 
     private val handler = Handler(Looper.getMainLooper())
-    private var isDispatched = false
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
         Log.d("VoiceAssistSession", "onShow triggered, showFlags: $showFlags")
-        isDispatched = false
 
-        // Wait up to 1200ms for system to dispatch onHandleScreenshot.
+        // Wait up to 600ms for system to dispatch onHandleScreenshot.
         // If not received (e.g. secure screen or screenshot disabled by user), launch app fallback.
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({
-            if (!isDispatched) {
-                isDispatched = true
-                Log.d("VoiceAssistSession", "Screenshot timeout reached, launching app fallback")
-                launchApp()
-            }
-        }, 1200)
+            launchApp()
+        }, 600)
     }
 
     override fun onHandleScreenshot(screenshot: Bitmap?) {
         super.onHandleScreenshot(screenshot)
         Log.d("VoiceAssistSession", "onHandleScreenshot received: ${screenshot?.width}x${screenshot?.height}")
         handler.removeCallbacksAndMessages(null)
-        if (!isDispatched) {
-            isDispatched = true
-            if (screenshot != null) {
-                CircleLensScreenshotHolder.setScreenshot(screenshot)
-            }
-            launchApp()
+        if (screenshot != null) {
+            CircleLensScreenshotHolder.setScreenshot(screenshot)
         }
+        launchApp()
     }
 
     override fun onHandleAssist(data: Bundle?, structure: AssistStructure?, content: AssistContent?) {
@@ -63,18 +54,27 @@ class CircleVoiceInteractionSession(context: Context) : VoiceInteractionSession(
     private fun launchApp() {
         val intent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_ASSIST
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
             putExtra("from_voice_assist", true)
+            putExtra("assist_launch_time", System.currentTimeMillis())
         }
-        context.startActivity(intent)
-        // Give a slight delay before hide so the activity can transition smoothly
+        try {
+            context.startActivity(intent)
+        } catch (e: Throwable) {
+            Log.e("VoiceAssistSession", "Failed to launch MainActivity", e)
+        }
         handler.postDelayed({
             try {
                 hide()
             } catch (e: Throwable) {
                 Log.w("VoiceAssistSession", "Error hiding session", e)
             }
-        }, 150)
+        }, 100)
     }
 
     override fun onDestroy() {
@@ -82,4 +82,3 @@ class CircleVoiceInteractionSession(context: Context) : VoiceInteractionSession(
         super.onDestroy()
     }
 }
-
