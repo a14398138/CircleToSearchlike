@@ -1,17 +1,15 @@
 package com.example.ui
 
 import android.graphics.RectF
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Scaffold
@@ -36,12 +34,8 @@ fun CircleLensScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var displayImageRect by remember { mutableStateOf(RectF()) }
 
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        if (uri != null) {
-            viewModel.loadBitmapFromUri(uri)
-        }
+    BackHandler(enabled = uiState.textSelection != null || uiState.activeCropSelection != null) {
+        viewModel.clearSelection()
     }
 
     Scaffold(
@@ -53,7 +47,7 @@ fun CircleLensScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Main Interactive Canvas
+            // Main Interactive Canvas (No top bar header)
             CircleLensOverlayCanvas(
                 modifier = Modifier.fillMaxSize(),
                 bitmap = uiState.currentBitmap,
@@ -85,33 +79,13 @@ fun CircleLensScreen(
                 }
             )
 
-            // Top Bar (Minimal Google Circle OCR Header)
-            CircleLensTopBar(
-                modifier = Modifier.align(Alignment.TopCenter),
-                onCloseOrClear = {
-                    if (uiState.textSelection != null || uiState.activeCropSelection != null) {
-                        viewModel.clearSelection()
-                    }
-                },
-                onOpenPresets = {
-                    viewModel.showPresetsSheet(true)
-                },
-                onPickGallery = {
-                    photoPickerLauncher.launch("image/*")
-                },
-                onOpenAssistHelp = {
-                    viewModel.showAssistHelp(true)
-                }
-            )
-
-            // Floating Action Popups & Bottom Search Bar Area
-            Column(
+            // Text Selection Popup (when user drags pins or selects words)
+            Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .navigationBarsPadding()
+                    .padding(bottom = 80.dp)
             ) {
-                // Floating Popup for Fine-Grained Text Selection
                 TextSelectionPopup(
                     textSelection = uiState.textSelection,
                     lastShareTarget = uiState.lastTextShareTarget,
@@ -121,8 +95,15 @@ fun CircleLensScreen(
                     onChangeTarget = { viewModel.showTargetPicker(true, isImage = false) },
                     onClear = { viewModel.clearSelection() }
                 )
+            }
 
-                // Floating Popup for Image Crop Selection
+            // Crop Selection Popup (when user circles or draws a box)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 80.dp)
+            ) {
                 CropSelectionPopup(
                     cropSelection = uiState.activeCropSelection,
                     lastShareTarget = uiState.lastImageShareTarget,
@@ -137,32 +118,31 @@ fun CircleLensScreen(
                     onChangeTarget = { viewModel.showTargetPicker(true, isImage = true) },
                     onClear = { viewModel.clearSelection() }
                 )
-
-                // Bottom Search Capsule & Quick Actions
-                CircleLensBottomBar(
-                    isOcrRunning = uiState.isOcrRunning,
-                    hasSelection = uiState.textSelection != null || uiState.activeCropSelection != null,
-                    selectedTextPreview = uiState.textSelection?.fullText,
-                    lastShareTarget = uiState.lastImageShareTarget ?: uiState.lastTextShareTarget,
-                    onShareEntireScreenGeneral = {
-                        viewModel.shareEntireScreen(null)
-                    },
-                    onShareEntireScreenDirect = { target ->
-                        viewModel.shareEntireScreen(target)
-                    },
-                    onSelectAllText = {
-                        val bmpW = uiState.currentBitmap?.width ?: 1080
-                        val bmpH = uiState.currentBitmap?.height ?: 2200
-                        viewModel.selectAllText(displayImageRect, bmpW, bmpH)
-                    },
-                    onClearSelection = {
-                        viewModel.clearSelection()
-                    },
-                    onOpenPresets = {
-                        viewModel.showPresetsSheet(true)
-                    }
-                )
             }
+
+            // Draggable Minimal Icon-Only Bottom Toolbar
+            CircleLensBottomBar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp),
+                isOcrRunning = uiState.isOcrRunning,
+                lastShareTarget = uiState.lastImageShareTarget ?: uiState.lastTextShareTarget,
+                onSelectAllText = {
+                    val bmpW = uiState.currentBitmap?.width ?: 1080
+                    val bmpH = uiState.currentBitmap?.height ?: 2200
+                    viewModel.selectAllText(displayImageRect, bmpW, bmpH)
+                },
+                onShareEntireScreenGeneral = {
+                    viewModel.shareEntireScreen(null)
+                },
+                onShareEntireScreenDirect = { target ->
+                    viewModel.shareEntireScreen(target)
+                },
+                onChangeShareTarget = {
+                    viewModel.showTargetPicker(true, isImage = true)
+                }
+            )
 
             // Feedback Toast / Banner
             AnimatedVisibility(
@@ -171,7 +151,7 @@ fun CircleLensScreen(
                 exit = fadeOut() + slideOutVertically(targetOffsetY = { -20 }),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 90.dp)
+                    .padding(top = 40.dp)
             ) {
                 uiState.feedbackMessage?.let { msg ->
                     Surface(
@@ -189,19 +169,6 @@ fun CircleLensScreen(
                 }
             }
         }
-    }
-
-    // Presets Sheet
-    if (uiState.showPresetsSheet) {
-        PresetsBottomSheet(
-            selectedPresetId = uiState.selectedPresetId,
-            onPresetSelected = { presetId ->
-                viewModel.loadPreset(presetId)
-            },
-            onDismiss = {
-                viewModel.showPresetsSheet(false)
-            }
-        )
     }
 
     // Target Picker Sheet
@@ -230,7 +197,7 @@ fun CircleLensScreen(
         )
     }
 
-    // Assistant Help Dialog
+    // Setup Wizard Help Dialog (Shown only when opened from launcher icon)
     if (uiState.showAssistHelpSheet) {
         AssistHelpDialog(
             onDismiss = {

@@ -20,9 +20,9 @@ import com.example.model.TrailPoint
 import com.example.ocr.OcrManager
 import com.example.share.ShareManager
 import com.example.util.CircleLensScreenshotHolder
-import com.example.util.SampleScreenGenerator
 import com.example.util.ScreenshotHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,7 +33,6 @@ import kotlin.math.min
 
 data class CircleLensUiState(
     val currentBitmap: Bitmap? = null,
-    val selectedPresetId: String = "news_article",
     val isOcrRunning: Boolean = false,
     val ocrItems: List<OcrTextItem> = emptyList(),
     val allTokens: List<OcrToken> = emptyList(),
@@ -45,7 +44,6 @@ data class CircleLensUiState(
     val lastImageShareTarget: ShareTarget? = null,
     val availableTextTargets: List<ShareTarget> = emptyList(),
     val availableImageTargets: List<ShareTarget> = emptyList(),
-    val showPresetsSheet: Boolean = false,
     val showTargetPickerSheet: Boolean = false,
     val targetPickerIsImage: Boolean = false,
     val showAssistHelpSheet: Boolean = false,
@@ -60,6 +58,9 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
     private val _uiState = MutableStateFlow(CircleLensUiState())
     val uiState: StateFlow<CircleLensUiState> = _uiState.asStateFlow()
 
+    private var activeLoadJob: Job? = null
+    private var isRealBitmapLoaded: Boolean = false
+
     init {
         // Observe share targets
         viewModelScope.launch {
@@ -73,8 +74,20 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
+        // Observe incoming assistant screenshots in real time
+        viewModelScope.launch {
+            CircleLensScreenshotHolder.screenshotFlow.collect { bitmap ->
+                loadBitmapDirect(bitmap, "画面をキャプチャしました")
+            }
+        }
+
         refreshAvailableTargets()
-        checkForIncomingScreenshotOrPreset()
+
+        // If there is already a captured screenshot pending, load it immediately
+        val captured = CircleLensScreenshotHolder.consumeScreenshot()
+        if (captured != null) {
+            loadBitmapDirect(captured, "画面をキャプチャしました")
+        }
     }
 
     fun refreshAvailableTargets() {
@@ -89,27 +102,33 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
-     * Checks if a screenshot was delivered via Assistant, or queries recent screenshot, or loads preset.
+     * Called when invoked via Assist / Home long-press
      */
-    fun checkForIncomingScreenshotOrPreset() {
+    fun onAssistLaunched() {
         val captured = CircleLensScreenshotHolder.consumeScreenshot()
         if (captured != null) {
             loadBitmapDirect(captured, "画面をキャプチャしました")
             return
         }
 
-        viewModelScope.launch {
+        activeLoadJob?.cancel()
+        activeLoadJob = viewModelScope.launch {
+            // Check if latest device screenshot is available from system
             val recent = ScreenshotHelper.getLatestDeviceScreenshot(getApplication())
             if (recent != null) {
-                loadBitmapDirect(recent, "最新の画面スクリーンショットを読み込みました")
-            } else {
-                loadPreset("news_article")
+                loadBitmapDirect(recent, "画面キャプチャを読み込みました")
+            } else if (_uiState.value.currentBitmap == null) {
+                _uiState.value = _uiState.value.copy(
+                    feedbackMessage = "画面を取得中..."
+                )
             }
         }
     }
 
     fun loadBitmapDirect(bitmap: Bitmap, message: String? = null) {
-        viewModelScope.launch {
+        activeLoadJob?.cancel()
+        isRealBitmapLoaded = true
+        activeLoadJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isOcrRunning = true,
                 textSelection = null,
@@ -117,34 +136,6 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
                 activeStrokePoints = emptyList(),
                 feedbackMessage = message ?: "OCR解析中..."
             )
-
-            val ocrResults = ocrManager.recognizeText(bitmap)
-            val flatTokens = ocrResults.flatMap { it.tokens }
-
-            _uiState.value = _uiState.value.copy(
-                currentBitmap = bitmap,
-                ocrItems = ocrResults,
-                allTokens = flatTokens,
-                isOcrRunning = false,
-                feedbackMessage = null
-            )
-        }
-    }
-
-    fun loadPreset(presetId: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isOcrRunning = true,
-                selectedPresetId = presetId,
-                textSelection = null,
-                activeCropSelection = null,
-                activeStrokePoints = emptyList(),
-                feedbackMessage = "画面を読み込み中..."
-            )
-
-            val bitmap = withContext(Dispatchers.Default) {
-                SampleScreenGenerator.createPresetBitmap(presetId)
-            }
 
             val ocrResults = ocrManager.recognizeText(bitmap)
             val flatTokens = ocrResults.flatMap { it.tokens }
@@ -556,10 +547,6 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun showPresetsSheet(show: Boolean) {
-        _uiState.value = _uiState.value.copy(showPresetsSheet = show)
-    }
-
     fun showTargetPicker(show: Boolean, isImage: Boolean) {
         _uiState.value = _uiState.value.copy(
             showTargetPickerSheet = show,
@@ -569,7 +556,11 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
 
     fun selectTargetFromPicker(target: ShareTarget, isImage: Boolean) {
         shareManager.updateLastShareTarget(target, isImage)
-        _uiState.value = _uiState.value.copy(showTargetPickerSheet = false)
+        _uiState.value = if (isImage) {
+            _uiState.value.copy(lastImageShareTarget = target, showTargetPickerSheet = false)
+        } else {
+            _uiState.value.copy(lastTextShareTarget = target, showTargetPickerSheet = false)
+        }
     }
 
     fun showAssistHelp(show: Boolean) {

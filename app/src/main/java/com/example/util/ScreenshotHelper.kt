@@ -9,15 +9,21 @@ import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import java.io.InputStream
 
 object CircleLensScreenshotHolder {
     private var pendingScreenshot: Bitmap? = null
+    private val _screenshotFlow = MutableSharedFlow<Bitmap>(replay = 1, extraBufferCapacity = 2)
+    val screenshotFlow: SharedFlow<Bitmap> = _screenshotFlow.asSharedFlow()
 
     @Synchronized
     fun setScreenshot(bitmap: Bitmap) {
         pendingScreenshot = bitmap
+        _screenshotFlow.tryEmit(bitmap)
     }
 
     @Synchronized
@@ -29,6 +35,9 @@ object CircleLensScreenshotHolder {
 
     @Synchronized
     fun peekScreenshot(): Bitmap? = pendingScreenshot
+
+    @Synchronized
+    fun hasPendingScreenshot(): Boolean = pendingScreenshot != null
 }
 
 object ScreenshotHelper {

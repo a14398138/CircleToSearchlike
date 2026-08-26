@@ -128,7 +128,7 @@ class ShareManager private constructor(context: Context) {
         }
     }
 
-    private fun resolveTarget(packageName: String, activityName: String?, mimeType: String): ShareTarget? {
+    fun resolveTarget(packageName: String, activityName: String?, mimeType: String): ShareTarget? {
         val pm = appContext.packageManager
         return try {
             val appInfo = pm.getApplicationInfo(packageName, 0)
@@ -150,7 +150,7 @@ class ShareManager private constructor(context: Context) {
                 iconBitmap = iconBitmap
             )
         } catch (e: Throwable) {
-            null
+            getAvailableShareTargets(mimeType).find { it.packageName == packageName }
         }
     }
 
@@ -210,7 +210,7 @@ class ShareManager private constructor(context: Context) {
     }
 
     suspend fun shareImageGeneral(bitmap: Bitmap, title: String = "画像を共有"): Boolean = withContext(Dispatchers.IO) {
-        val uri = saveBitmapToCache(bitmap, "share_image_${System.currentTimeMillis()}.png", "images")
+        val uri = saveBitmapToCache(bitmap, "share_image_latest.png", "images")
             ?: return@withContext false
 
         withContext(Dispatchers.Main) {
@@ -227,7 +227,7 @@ class ShareManager private constructor(context: Context) {
     }
 
     suspend fun shareImageDirect(bitmap: Bitmap, target: ShareTarget): Boolean = withContext(Dispatchers.IO) {
-        val uri = saveBitmapToCache(bitmap, "direct_image_${System.currentTimeMillis()}.png", "crops")
+        val uri = saveBitmapToCache(bitmap, "direct_image_latest.png", "crops")
             ?: return@withContext false
 
         withContext(Dispatchers.Main) {
@@ -269,7 +269,7 @@ class ShareManager private constructor(context: Context) {
     }
 
     suspend fun copyImageToClipboard(bitmap: Bitmap): Boolean = withContext(Dispatchers.IO) {
-        val uri = saveBitmapToCache(bitmap, "clipboard_crop_${System.currentTimeMillis()}.png", "crops")
+        val uri = saveBitmapToCache(bitmap, "clipboard_crop_latest.png", "crops")
             ?: return@withContext false
 
         withContext(Dispatchers.Main) {
@@ -286,8 +286,9 @@ class ShareManager private constructor(context: Context) {
             val dir = File(appContext.cacheDir, subDir)
             if (!dir.exists()) dir.mkdirs()
             val file = File(dir, filename)
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            // Use JPEG 92% or Fast PNG with buffered stream to minimize compression and I/O lag
+            java.io.BufferedOutputStream(FileOutputStream(file), 32768).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
             }
             FileProvider.getUriForFile(
                 appContext,

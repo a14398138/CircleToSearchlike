@@ -48,6 +48,9 @@ class MainActivity : ComponentActivity() {
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
 
+        val isAssist = intent.getBooleanExtra("from_voice_assist", false) ||
+                intent.action == Intent.ACTION_ASSIST
+
         // 1. Check Voice Assistant / ScreenshotHolder
         val captured = CircleLensScreenshotHolder.consumeScreenshot()
         if (captured != null) {
@@ -90,8 +93,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
             Intent.ACTION_ASSIST -> {
-                viewModel.checkForIncomingScreenshotOrPreset()
-                viewModel.refreshAvailableTargets()
+                viewModel.onAssistLaunched()
+            }
+            else -> {
+                if (isAssist) {
+                    viewModel.onAssistLaunched()
+                } else if (intent.action == Intent.ACTION_MAIN && intent.categories?.contains(Intent.CATEGORY_LAUNCHER) == true) {
+                    // Opened directly by tapping the app launcher icon -> show setup wizard
+                    viewModel.showAssistHelp(true)
+                }
             }
         }
     }

@@ -73,14 +73,3 @@ data class TrailPoint(
     val alpha: Float = 1.0f,
     val colorIndex: Int = 0
 )
-
-/**
- * Sample screen preset for testing and demonstration.
- */
-data class ScreenPreset(
-    val id: String,
-    val title: String,
-    val category: String,
-    val description: String,
-    val primaryColor: Long
-)

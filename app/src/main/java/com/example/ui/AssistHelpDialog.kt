@@ -21,10 +21,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -39,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -96,7 +93,7 @@ fun AssistHelpDialog(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Circle to Search 連携設定",
+                            text = "アシスタント連携設定",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
@@ -133,61 +130,71 @@ fun AssistHelpDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Steps list
+                // Step 1
                 HelpStepItem(
                     step = "1",
                     title = "デフォルトのアシスタントアプリに設定",
                     desc = "端末の「設定」➜「アプリ」➜「デフォルトのアプリ」➜「デジタルアシスタントアプリ」で「Circle OCR」を選択します。"
                 )
+
                 Spacer(modifier = Modifier.height(10.dp))
+
+                // Step 2
                 HelpStepItem(
                     step = "2",
-                    title = "ホームボタン長押しで起動",
-                    desc = "どのアプリを開いていても、ホームボタン長押しまたはジェスチャーバー長押しで即座にOCR認識が走ります。"
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                HelpStepItem(
-                    step = "3",
-                    title = "指でなぞって共有・円で囲んで切り抜き",
-                    desc = "文字の上をなぞるとコピー/共有、丸を描くと画像の切り抜き枠が出現し、前回使ったアプリへ1タップで送信できます。"
+                    title = "画面コンテキストとスクショを許可",
+                    desc = "アシスタント設定内の「画面のテキストを使用」「スクリーンショットを使用」をオンにしてください。"
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Launch Settings Button
+                // Button to launch default assist settings
                 Button(
                     onClick = {
-                        try {
-                            val intent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            context.startActivity(intent)
-                        } catch (e: Throwable) {
-                            try {
-                                val intent = Intent(Settings.ACTION_SETTINGS)
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                            } catch (_: Throwable) {}
-                        }
+                        openVoiceAssistSettings(context)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("open_system_settings_button"),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+                        .height(46.dp)
+                        .testTag("open_assist_settings_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = null,
-                        tint = Color.White,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "端末のデフォルト設定を開く",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        text = "アシスタント設定を開く",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("dismiss_wizard_button"),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "はじめる",
+                        fontSize = 14.sp,
+                        color = Color(0xFF38BDF8),
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -196,7 +203,11 @@ fun AssistHelpDialog(
 }
 
 @Composable
-private fun HelpStepItem(step: String, title: String, desc: String) {
+private fun HelpStepItem(
+    step: String,
+    title: String,
+    desc: String
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
@@ -204,15 +215,15 @@ private fun HelpStepItem(step: String, title: String, desc: String) {
         Box(
             modifier = Modifier
                 .size(24.dp)
-                .background(Color(0xFF1E293B), CircleShape)
-                .border(1.dp, Color(0xFF38BDF8), CircleShape),
+                .clip(CircleShape)
+                .background(Color(0xFF38BDF8)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = step,
-                color = Color(0xFF38BDF8),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
+                color = Color(0xFF0F172A),
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
             )
         }
         Spacer(modifier = Modifier.width(10.dp))
@@ -220,8 +231,8 @@ private fun HelpStepItem(step: String, title: String, desc: String) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium.copy(
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF1F5F9),
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp
                 )
             )
@@ -234,6 +245,24 @@ private fun HelpStepItem(step: String, title: String, desc: String) {
                     lineHeight = 16.sp
                 )
             )
+        }
+    }
+}
+
+private fun openVoiceAssistSettings(context: Context) {
+    try {
+        val intent = Intent(Settings.ACTION_VOICE_INPUT_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (e: Throwable) {
+        try {
+            val intent = Intent(Settings.ACTION_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e2: Throwable) {
+            // Ignored
         }
     }
 }
