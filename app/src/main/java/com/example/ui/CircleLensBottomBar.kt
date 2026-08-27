@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -42,7 +43,8 @@ import kotlin.math.roundToInt
 @Composable
 fun CircleLensBottomBar(
     modifier: Modifier = Modifier,
-    isOcrRunning: Boolean,
+    isReady: Boolean = true,
+    isOcrRunning: Boolean = false,
     lastShareTarget: ShareTarget?,
     onSelectAllText: () -> Unit,
     onShareEntireScreenGeneral: () -> Unit,
@@ -96,24 +98,7 @@ fun CircleLensBottomBar(
                 )
             }
 
-            // 1. "すべての文字を選択" Icon Button
-            IconButton(
-                onClick = onSelectAllText,
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF1E293B))
-                    .testTag("select_all_text_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SelectAll,
-                    contentDescription = "すべての文字を選択",
-                    tint = Color(0xFF38BDF8),
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-
-            // 2. "画面全体を送る" Icon Button
+            // 1. "すべての文字を選択" Icon Button (Shows subtle loader only while text OCR is parsing)
             if (isOcrRunning) {
                 Box(
                     modifier = Modifier
@@ -123,27 +108,48 @@ fun CircleLensBottomBar(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                         color = Color(0xFF38BDF8),
                         strokeWidth = 2.dp
                     )
                 }
             } else {
                 IconButton(
-                    onClick = onShareEntireScreenGeneral,
+                    onClick = onSelectAllText,
+                    enabled = isReady,
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF2563EB))
-                        .testTag("share_entire_screen_button")
+                        .background(Color(0xFF1E293B))
+                        .alpha(if (isReady) 1f else 0.4f)
+                        .testTag("select_all_text_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Screenshot,
-                        contentDescription = "画面全体を送る",
-                        tint = Color.White,
+                        imageVector = Icons.Default.SelectAll,
+                        contentDescription = "すべての文字を選択",
+                        tint = Color(0xFF38BDF8),
                         modifier = Modifier.size(22.dp)
                     )
                 }
+            }
+
+            // 2. "画面全体を送る" Icon Button (Instant ready when bitmap is available)
+            IconButton(
+                onClick = onShareEntireScreenGeneral,
+                enabled = isReady,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF2563EB))
+                    .alpha(if (isReady) 1f else 0.4f)
+                    .testTag("share_entire_screen_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Screenshot,
+                    contentDescription = "画面全体を送る",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp)
+                )
             }
 
             // 3. 前回共有したアプリのアイコン (直接送信)
@@ -154,7 +160,10 @@ fun CircleLensBottomBar(
                         .clip(CircleShape)
                         .background(Color(0xFF1E293B))
                         .border(1.dp, Color(0xFF334155), CircleShape)
-                        .clickable { onShareEntireScreenDirect(lastShareTarget) }
+                        .alpha(if (isReady) 1f else 0.4f)
+                        .clickable(enabled = isReady) {
+                            onShareEntireScreenDirect(lastShareTarget)
+                        }
                         .testTag("direct_share_last_app_button"),
                     contentAlignment = Alignment.Center
                 ) {

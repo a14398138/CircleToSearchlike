@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.UUID
 
 class ShareManager private constructor(context: Context) {
 
@@ -99,50 +100,39 @@ class ShareManager private constructor(context: Context) {
             emptyList()
         }
 
-        return resolveInfos.mapNotNull { info ->
-            try {
-                val pkg = info.activityInfo.packageName
-                if (pkg == appContext.packageName) return@mapNotNull null // Exclude self
-                val act = info.activityInfo.name
-                val label = info.loadLabel(pm).toString()
-                val iconDrawable = info.loadIcon(pm)
-                val iconBitmap = drawableToBitmap(iconDrawable)?.asImageBitmap()
+        val myPkg = appContext.packageName
+        return resolveInfos
+            .filter { it.activityInfo.packageName != myPkg }
+            .map { ri ->
+                val pkgName = ri.activityInfo.packageName
+                val actName = ri.activityInfo.name
+                val label = ri.loadLabel(pm)?.toString() ?: pkgName
+                val iconDrawable = ri.loadIcon(pm)
+                val iconBmp = iconDrawable?.let { drawableToBitmap(it) }
 
                 ShareTarget(
-                    packageName = pkg,
-                    activityName = act,
+                    packageName = pkgName,
+                    activityName = actName,
                     appName = label,
-                    iconBitmap = iconBitmap
+                    iconBitmap = iconBmp?.asImageBitmap()
                 )
-            } catch (e: Throwable) {
-                null
             }
-        }.distinctBy { it.packageName }
+            .distinctBy { "${it.packageName}/${it.activityName}" }
     }
 
-    fun updateLastShareTargetFromComponent(componentName: ComponentName, isImage: Boolean) {
-        val mimeType = if (isImage) "image/png" else "text/plain"
-        val target = resolveTarget(componentName.packageName, componentName.className, mimeType)
-        if (target != null) {
-            updateLastShareTarget(target, isImage)
-        }
-    }
-
-    fun resolveTarget(packageName: String, activityName: String?, mimeType: String): ShareTarget? {
-        val pm = appContext.packageManager
+    private fun resolveTarget(packageName: String, activityName: String?, mimeType: String): ShareTarget? {
         return try {
+            val pm = appContext.packageManager
+            val componentName = if (activityName != null) ComponentName(packageName, activityName) else null
             val appInfo = pm.getApplicationInfo(packageName, 0)
             val label = pm.getApplicationLabel(appInfo).toString()
-            val iconDrawable = if (!activityName.isNullOrEmpty()) {
-                try {
-                    pm.getActivityIcon(ComponentName(packageName, activityName))
-                } catch (e: Throwable) {
-                    pm.getApplicationIcon(appInfo)
-                }
+            val iconDrawable = if (componentName != null) {
+                try { pm.getActivityIcon(componentName) } catch (e: Throwable) { pm.getApplicationIcon(appInfo) }
             } else {
                 pm.getApplicationIcon(appInfo)
             }
             val iconBitmap = drawableToBitmap(iconDrawable)?.asImageBitmap()
+
             ShareTarget(
                 packageName = packageName,
                 activityName = activityName,
@@ -151,6 +141,17 @@ class ShareManager private constructor(context: Context) {
             )
         } catch (e: Throwable) {
             getAvailableShareTargets(mimeType).find { it.packageName == packageName }
+        }
+    }
+
+    fun updateLastShareTargetFromComponent(componentName: ComponentName, isImage: Boolean) {
+        val target = resolveTarget(
+            componentName.packageName,
+            componentName.className,
+            if (isImage) "image/png" else "text/plain"
+        )
+        if (target != null) {
+            updateLastShareTarget(target, isImage)
         }
     }
 
@@ -210,31 +211,45 @@ class ShareManager private constructor(context: Context) {
     }
 
     suspend fun shareImageGeneral(bitmap: Bitmap, title: String = "画像を共有"): Boolean = withContext(Dispatchers.IO) {
-        val uri = saveBitmapToCache(bitmap, "share_image_latest.png", "images")
+        // Unique filename per share ensures external apps (Gemini, Google App, etc.) never reuse cached thumbnails/bitmaps
+        val uniqueFilename = "share_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}.png"
+        val uri = saveBitmapToCache(bitmap, uniqueFilename, "images")
             ?: return@withContext false
 
         withContext(Dispatchers.Main) {
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                putExtra(Intent.EXTRA_STREAM, uri)
                 type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newUri(appContext.contentResolver, "Screenshot", uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             val chooser = createTrackedChooser(sendIntent, title, isImage = true)
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             appContext.startActivity(chooser)
         }
         true
     }
 
     suspend fun shareImageDirect(bitmap: Bitmap, target: ShareTarget): Boolean = withContext(Dispatchers.IO) {
-        val uri = saveBitmapToCache(bitmap, "direct_image_latest.png", "crops")
+        // Unique filename per direct share ensures target app doesn't load stale cached content
+        val uniqueFilename = "crop_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}.png"
+        val uri = saveBitmapToCache(bitmap, uniqueFilename, "crops")
             ?: return@withContext false
 
         withContext(Dispatchers.Main) {
             try {
+                if (target.packageName.isNotEmpty()) {
+                    appContext.grantUriPermission(
+                        target.packageName,
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
                 val intent = Intent(Intent.ACTION_SEND).apply {
-                    putExtra(Intent.EXTRA_STREAM, uri)
                     type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(appContext.contentResolver, "Cropped Image", uri)
                     if (target.activityName != null) {
                         component = ComponentName(target.packageName, target.activityName)
                     } else {
@@ -269,7 +284,8 @@ class ShareManager private constructor(context: Context) {
     }
 
     suspend fun copyImageToClipboard(bitmap: Bitmap): Boolean = withContext(Dispatchers.IO) {
-        val uri = saveBitmapToCache(bitmap, "clipboard_crop_latest.png", "crops")
+        val uniqueFilename = "clip_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}.png"
+        val uri = saveBitmapToCache(bitmap, uniqueFilename, "crops")
             ?: return@withContext false
 
         withContext(Dispatchers.Main) {
@@ -285,10 +301,13 @@ class ShareManager private constructor(context: Context) {
         return try {
             val dir = File(appContext.cacheDir, subDir)
             if (!dir.exists()) dir.mkdirs()
+
+            // Cleanup old cache files older than 5 minutes to keep cache lean without memory leaks
+            cleanupOldCacheFiles(dir)
+
             val file = File(dir, filename)
-            // Use JPEG 92% or Fast PNG with buffered stream to minimize compression and I/O lag
             java.io.BufferedOutputStream(FileOutputStream(file), 32768).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }
             FileProvider.getUriForFile(
                 appContext,
@@ -298,6 +317,25 @@ class ShareManager private constructor(context: Context) {
         } catch (e: Throwable) {
             Log.e("ShareManager", "Failed to save bitmap to cache", e)
             null
+        }
+    }
+
+    private fun cleanupOldCacheFiles(dir: File) {
+        try {
+            val now = System.currentTimeMillis()
+            val files = dir.listFiles() ?: return
+            if (files.size > 10) {
+                files.sortBy { it.lastModified() }
+                val toDelete = files.take(files.size - 10)
+                toDelete.forEach { it.delete() }
+            }
+            for (f in files) {
+                if (now - f.lastModified() > 300_000) {
+                    f.delete()
+                }
+            }
+        } catch (e: Throwable) {
+            Log.w("ShareManager", "Error cleaning old cache files", e)
         }
     }
 

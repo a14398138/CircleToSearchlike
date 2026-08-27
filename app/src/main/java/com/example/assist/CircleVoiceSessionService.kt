@@ -1,10 +1,12 @@
 package com.example.assist
 
+import android.app.ActivityOptions
 import android.app.assist.AssistContent
 import android.app.assist.AssistStructure
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -23,17 +25,36 @@ class CircleVoiceSessionService : VoiceInteractionSessionService() {
 class CircleVoiceInteractionSession(context: Context) : VoiceInteractionSession(context) {
 
     private val handler = Handler(Looper.getMainLooper())
+    private var hasHandledCurrentSession = false
+
+    override fun onCreate() {
+        super.onCreate()
+        try {
+            // CircleLens delegates overlay UI to MainActivity
+            setUiEnabled(false)
+        } catch (e: Throwable) {
+            Log.w("VoiceAssistSession", "Could not setUiEnabled(false)", e)
+        }
+    }
+
+    override fun onPrepareShow(args: Bundle?, showFlags: Int) {
+        super.onPrepareShow(args, showFlags)
+        hasHandledCurrentSession = false
+    }
 
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
         Log.d("VoiceAssistSession", "onShow triggered, showFlags: $showFlags")
 
-        // Wait up to 600ms for system to dispatch onHandleScreenshot.
-        // If not received (e.g. secure screen or screenshot disabled by user), launch app fallback.
+        // Safety fallback: If OS doesn't deliver onHandleScreenshot within 350ms
+        // (e.g. secure screen, DRM, or slow OS hook), launch MainActivity anyway
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({
-            launchApp()
-        }, 600)
+            if (!hasHandledCurrentSession) {
+                Log.d("VoiceAssistSession", "Fallback timer triggered launch")
+                launchAssistantActivity()
+            }
+        }, 350)
     }
 
     override fun onHandleScreenshot(screenshot: Bitmap?) {
@@ -43,38 +64,62 @@ class CircleVoiceInteractionSession(context: Context) : VoiceInteractionSession(
         if (screenshot != null) {
             CircleLensScreenshotHolder.setScreenshot(screenshot)
         }
-        launchApp()
+        launchAssistantActivity()
     }
 
     override fun onHandleAssist(data: Bundle?, structure: AssistStructure?, content: AssistContent?) {
         super.onHandleAssist(data, structure, content)
         Log.d("VoiceAssistSession", "onHandleAssist triggered")
+        if (!hasHandledCurrentSession) {
+            handler.removeCallbacksAndMessages(null)
+            launchAssistantActivity()
+        }
     }
 
-    private fun launchApp() {
+    private fun launchAssistantActivity() {
+        hasHandledCurrentSession = true
+        handler.removeCallbacksAndMessages(null)
+
         val intent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_ASSIST
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
             )
             putExtra("from_voice_assist", true)
             putExtra("assist_launch_time", System.currentTimeMillis())
         }
-        try {
-            context.startActivity(intent)
-        } catch (e: Throwable) {
-            Log.e("VoiceAssistSession", "Failed to launch MainActivity", e)
+
+        var launchedSuccessfully = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                startAssistantActivity(intent)
+                launchedSuccessfully = true
+            } catch (e: Throwable) {
+                Log.w("VoiceAssistSession", "startAssistantActivity failed, falling back to context.startActivity", e)
+            }
         }
-        handler.postDelayed({
+
+        if (!launchedSuccessfully) {
+            try {
+                val options = ActivityOptions.makeCustomAnimation(context, 0, 0).toBundle()
+                context.startActivity(intent, options)
+                launchedSuccessfully = true
+            } catch (e: Throwable) {
+                Log.e("VoiceAssistSession", "Failed to launch MainActivity", e)
+            }
+        }
+
+        // Gracefully finish session after activity launch without abruptly aborting window transition
+        try {
+            finish()
+        } catch (e: Throwable) {
             try {
                 hide()
-            } catch (e: Throwable) {
-                Log.w("VoiceAssistSession", "Error hiding session", e)
-            }
-        }, 100)
+            } catch (_: Throwable) {}
+        }
     }
 
     override fun onDestroy() {

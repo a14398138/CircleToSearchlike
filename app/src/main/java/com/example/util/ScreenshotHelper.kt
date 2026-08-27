@@ -17,7 +17,7 @@ import java.io.InputStream
 
 object CircleLensScreenshotHolder {
     private var pendingScreenshot: Bitmap? = null
-    private val _screenshotFlow = MutableSharedFlow<Bitmap>(replay = 1, extraBufferCapacity = 2)
+    private val _screenshotFlow = MutableSharedFlow<Bitmap>(replay = 0, extraBufferCapacity = 4)
     val screenshotFlow: SharedFlow<Bitmap> = _screenshotFlow.asSharedFlow()
 
     @Synchronized
@@ -38,6 +38,11 @@ object CircleLensScreenshotHolder {
 
     @Synchronized
     fun hasPendingScreenshot(): Boolean = pendingScreenshot != null
+
+    @Synchronized
+    fun clear() {
+        pendingScreenshot = null
+    }
 }
 
 object ScreenshotHelper {

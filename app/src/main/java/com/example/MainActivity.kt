@@ -10,9 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.example.ui.CircleLensScreen
 import com.example.ui.CircleLensViewModel
 import com.example.ui.theme.MyApplicationTheme
@@ -24,15 +22,14 @@ class MainActivity : ComponentActivity() {
     private val viewModel: CircleLensViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        disableWindowTransitions()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleIncomingIntent(intent)
 
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.closeAppEvent.collect {
-                    finish()
-                }
+            viewModel.closeAppEvent.collect {
+                closeApp()
             }
         }
 
@@ -40,22 +37,39 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme(darkTheme = true) {
                 CircleLensScreen(
                     viewModel = viewModel,
-                    onCloseApp = { finish() }
+                    onCloseApp = { closeApp() }
                 )
             }
         }
     }
 
+    private fun disableWindowTransitions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
+        }
+    }
+
+    private fun closeApp() {
+        finish()
+        disableWindowTransitions()
+    }
+
     override fun onResume() {
         super.onResume()
+        disableWindowTransitions()
         val captured = CircleLensScreenshotHolder.consumeScreenshot()
         if (captured != null) {
-            viewModel.loadBitmapDirect(captured, "画面をキャプチャしました")
+            viewModel.loadBitmapDirect(captured, null)
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        disableWindowTransitions()
         setIntent(intent)
         handleIncomingIntent(intent)
     }
@@ -64,12 +78,13 @@ class MainActivity : ComponentActivity() {
         if (intent == null) return
 
         val isAssist = intent.getBooleanExtra("from_voice_assist", false) ||
-                intent.action == Intent.ACTION_ASSIST
+                intent.action == Intent.ACTION_ASSIST ||
+                intent.action == Intent.ACTION_VOICE_COMMAND
 
         // 1. Check Voice Assistant / ScreenshotHolder
         val captured = CircleLensScreenshotHolder.consumeScreenshot()
         if (captured != null) {
-            viewModel.loadBitmapDirect(captured, "画面をキャプチャしました")
+            viewModel.loadBitmapDirect(captured, null)
             return
         }
 
@@ -88,7 +103,7 @@ class MainActivity : ComponentActivity() {
         }
 
         if (screenshotBitmap != null) {
-            viewModel.loadBitmapDirect(screenshotBitmap, "画面キャプチャを読み込みました")
+            viewModel.loadBitmapDirect(screenshotBitmap, null)
             return
         }
 
@@ -107,7 +122,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            Intent.ACTION_ASSIST -> {
+            Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND -> {
                 viewModel.onAssistLaunched()
             }
             else -> {

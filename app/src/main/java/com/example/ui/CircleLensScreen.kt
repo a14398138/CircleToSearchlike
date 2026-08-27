@@ -89,8 +89,12 @@ fun CircleLensScreen(
                 textSelection = uiState.textSelection,
                 lastShareTarget = uiState.lastTextShareTarget,
                 onCopy = { viewModel.copySelectedText() },
-                onShareGeneral = { viewModel.shareSelectedText(null) },
-                onShareDirect = { target -> viewModel.shareSelectedText(target) },
+                onShareGeneral = {
+                    viewModel.shareSelectedText(null)
+                },
+                onShareDirect = { target ->
+                    viewModel.shareSelectedText(target)
+                },
                 onClear = { viewModel.clearSelection() }
             )
         }
@@ -105,8 +109,12 @@ fun CircleLensScreen(
             CropSelectionPopup(
                 cropSelection = uiState.activeCropSelection,
                 lastShareTarget = uiState.lastImageShareTarget,
-                onShareImageGeneral = { viewModel.shareCroppedImage(null) },
-                onShareImageDirect = { target -> viewModel.shareCroppedImage(target) },
+                onShareImageGeneral = {
+                    viewModel.shareCroppedImage(null)
+                },
+                onShareImageDirect = { target ->
+                    viewModel.shareCroppedImage(target)
+                },
                 onCopyImage = { viewModel.copyCroppedImage() },
                 onOcrCrop = {
                     val bmpW = uiState.currentBitmap?.width ?: 1080
@@ -123,6 +131,7 @@ fun CircleLensScreen(
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 16.dp),
+            isReady = uiState.currentBitmap != null,
             isOcrRunning = uiState.isOcrRunning,
             lastShareTarget = uiState.lastImageShareTarget ?: uiState.lastTextShareTarget,
             onSelectAllText = {

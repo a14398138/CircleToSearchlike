@@ -29,6 +29,15 @@ class OcrManager {
         }
     }
 
+    fun warmUp() {
+        try {
+            // Trigger lazy loading of ML Kit models on a background worker thread
+            japaneseRecognizer
+        } catch (e: Throwable) {
+            Log.w("OcrManager", "OCR warm-up notice", e)
+        }
+    }
+
     suspend fun recognizeText(bitmap: Bitmap): List<OcrTextItem> = withContext(Dispatchers.Default) {
         val inputImage = try {
             InputImage.fromBitmap(bitmap, 0)

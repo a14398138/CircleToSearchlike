@@ -80,8 +80,13 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
         // Observe incoming assistant screenshots in real time
         viewModelScope.launch {
             CircleLensScreenshotHolder.screenshotFlow.collect { bitmap ->
-                loadBitmapDirect(bitmap, "画面をキャプチャしました")
+                loadBitmapDirect(bitmap, null)
             }
+        }
+
+        // Pre-warm OCR engine in background to eliminate first-use cold start latency
+        viewModelScope.launch(Dispatchers.Default) {
+            ocrManager.warmUp()
         }
 
         refreshAvailableTargets()
@@ -89,7 +94,7 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
         // If there is already a captured screenshot pending, load it immediately
         val captured = CircleLensScreenshotHolder.consumeScreenshot()
         if (captured != null) {
-            loadBitmapDirect(captured, "画面をキャプチャしました")
+            loadBitmapDirect(captured, null)
         }
     }
 
@@ -110,7 +115,7 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
     fun onAssistLaunched() {
         val captured = CircleLensScreenshotHolder.consumeScreenshot()
         if (captured != null) {
-            loadBitmapDirect(captured, "画面をキャプチャしました")
+            loadBitmapDirect(captured, null)
             return
         }
 
@@ -119,7 +124,7 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
             // Check if latest device screenshot is available from system
             val recent = ScreenshotHelper.getLatestDeviceScreenshot(getApplication())
             if (recent != null) {
-                loadBitmapDirect(recent, "画面キャプチャを読み込みました")
+                loadBitmapDirect(recent, null)
             } else if (_uiState.value.currentBitmap == null) {
                 _uiState.value = _uiState.value.copy(
                     feedbackMessage = "画面を取得中..."
@@ -131,15 +136,18 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
     fun loadBitmapDirect(bitmap: Bitmap, message: String? = null) {
         activeLoadJob?.cancel()
         isRealBitmapLoaded = true
-        activeLoadJob = viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isOcrRunning = true,
-                textSelection = null,
-                activeCropSelection = null,
-                activeStrokePoints = emptyList(),
-                feedbackMessage = message ?: "OCR解析中..."
-            )
 
+        // ⚡ INSTANT RENDERING: Display bitmap immediately in 0ms without waiting for OCR
+        _uiState.value = _uiState.value.copy(
+            currentBitmap = bitmap,
+            isOcrRunning = true,
+            textSelection = null,
+            activeCropSelection = null,
+            activeStrokePoints = emptyList(),
+            feedbackMessage = message
+        )
+
+        activeLoadJob = viewModelScope.launch {
             val ocrResults = ocrManager.recognizeText(bitmap)
             val flatTokens = ocrResults.flatMap { it.tokens }
 
@@ -549,7 +557,13 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun shareEntireScreen(target: ShareTarget? = null) {
-        val fullBmp = _uiState.value.currentBitmap ?: return
+        val fullBmp = _uiState.value.currentBitmap
+        if (fullBmp == null) {
+            _uiState.value = _uiState.value.copy(
+                feedbackMessage = "画面キャプチャを準備中です。少々お待ちください..."
+            )
+            return
+        }
         viewModelScope.launch {
             if (target != null) {
                 shareManager.shareImageDirect(fullBmp, target)
