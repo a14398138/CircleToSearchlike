@@ -6,10 +6,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -18,21 +20,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.model.CropSelection
@@ -40,122 +45,159 @@ import com.example.model.ShareTarget
 import com.example.model.TextSelectionState
 
 /**
- * Clean & minimal floating text action toolbar.
+ * Clean & minimal floating text action toolbar styled with white frosted glass and monochrome black accents.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TextSelectionPopup(
     modifier: Modifier = Modifier,
     textSelection: TextSelectionState?,
     lastShareTarget: ShareTarget?,
+    recentTargets: List<ShareTarget> = emptyList(),
     onCopy: () -> Unit,
     onShareGeneral: () -> Unit,
     onShareDirect: (ShareTarget) -> Unit,
-    onClear: () -> Unit
+    onOpenAllTargetsPicker: () -> Unit = {}
 ) {
+    var showRecentSlider by remember { mutableStateOf(false) }
+
     AnimatedVisibility(
         visible = textSelection != null && textSelection.selectedTokens.isNotEmpty(),
-        enter = fadeIn() + slideInVertically(initialOffsetY = { 30 }, animationSpec = spring()),
-        exit = fadeOut() + slideOutVertically(targetOffsetY = { 30 })
+        enter = fadeIn() + slideInVertically(initialOffsetY = { 20 }, animationSpec = spring()),
+        exit = fadeOut() + slideOutVertically(targetOffsetY = { 20 })
     ) {
-        Surface(
-            modifier = modifier
-                .shadow(elevation = 16.dp, shape = CircleShape)
-                .border(
-                    width = 1.dp,
-                    brush = Brush.horizontalGradient(
-                        listOf(Color(0xFF38BDF8), Color(0xFF818CF8))
-                    ),
-                    shape = CircleShape
-                ),
-            shape = CircleShape,
-            color = Color(0xF20F172A),
-            tonalElevation = 10.dp
+        Box(
+            modifier = modifier,
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            RecentShareTargetsSlider(
+                modifier = Modifier
+                    .padding(bottom = 58.dp)
+                    .align(Alignment.BottomCenter),
+                visible = showRecentSlider,
+                recentTargets = recentTargets,
+                isImage = false,
+                onTargetSelected = { target ->
+                    showRecentSlider = false
+                    onShareDirect(target)
+                },
+                onOpenAllTargetsPicker = {
+                    showRecentSlider = false
+                    onOpenAllTargetsPicker()
+                },
+                onDismiss = {
+                    showRecentSlider = false
+                }
+            )
+
+            Surface(
+                modifier = Modifier
+                    .shadow(elevation = 14.dp, shape = CircleShape)
+                    .border(
+                        width = 1.dp,
+                        color = Color(0x33000000),
+                        shape = CircleShape
+                    ),
+                shape = CircleShape,
+                color = Color(0xCCFFFFFF),
+                tonalElevation = 8.dp
             ) {
-                // Copy Text Button
-                IconButton(
-                    onClick = onCopy,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1E293B))
-                        .testTag("copy_text_button")
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "テキストをコピー",
-                        tint = Color(0xFF38BDF8),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Share Text Button (General)
-                IconButton(
-                    onClick = onShareGeneral,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF2563EB))
-                        .testTag("share_text_general_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "テキストを共有",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Last Direct Share App
-                if (lastShareTarget != null) {
-                    Box(
+                    // Copy Text Button
+                    IconButton(
+                        onClick = onCopy,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF1E293B))
-                            .border(1.dp, Color(0xFF334155), CircleShape)
-                            .clickable { onShareDirect(lastShareTarget) }
-                            .testTag("direct_share_text_button"),
-                        contentAlignment = Alignment.Center
+                            .background(Color(0x0F000000))
+                            .testTag("copy_text_button")
                     ) {
-                        if (lastShareTarget.iconBitmap != null) {
-                            Image(
-                                bitmap = lastShareTarget.iconBitmap,
-                                contentDescription = "${lastShareTarget.appName} に送信",
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "${lastShareTarget.appName} に送信",
-                                tint = Color(0xFF67E8F9),
-                                modifier = Modifier.size(18.dp)
-                            )
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "テキストをコピー",
+                            tint = Color(0xFF0F172A),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Share Text Button (General)
+                    IconButton(
+                        onClick = onShareGeneral,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x0F000000))
+                            .testTag("share_text_general_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "テキストを共有",
+                            tint = Color(0xFF0F172A),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Last Direct Share App (Slide up for recent history)
+                    if (lastShareTarget != null) {
+                        var totalDragY by remember { mutableFloatStateOf(0f) }
+
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x0F000000))
+                                .border(1.dp, if (showRecentSlider) Color(0xFF0F172A) else Color(0x1F000000), CircleShape)
+                                .pointerInput(Unit) {
+                                    detectDragGestures(
+                                        onDragStart = { totalDragY = 0f },
+                                        onDragEnd = {
+                                            if (totalDragY < -20f) showRecentSlider = true
+                                            totalDragY = 0f
+                                        },
+                                        onDragCancel = { totalDragY = 0f }
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        totalDragY += dragAmount.y
+                                        if (totalDragY < -25f) showRecentSlider = true
+                                    }
+                                }
+                                .combinedClickable(
+                                    onClick = {
+                                        if (showRecentSlider) {
+                                            showRecentSlider = false
+                                        } else {
+                                            onShareDirect(lastShareTarget)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        showRecentSlider = !showRecentSlider
+                                    }
+                                )
+                                .testTag("direct_share_text_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (lastShareTarget.iconBitmap != null) {
+                                Image(
+                                    bitmap = lastShareTarget.iconBitmap,
+                                    contentDescription = "${lastShareTarget.appName} に送信（上にスライドで履歴表示）",
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "${lastShareTarget.appName} に送信（上にスライドで履歴表示）",
+                                    tint = Color(0xFF0F172A),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
-                }
-
-                // Clear Button
-                IconButton(
-                    onClick = onClear,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x1AFFFFFF))
-                        .testTag("clear_text_selection_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "選択解除",
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(18.dp)
-                    )
                 }
             }
         }
@@ -163,140 +205,142 @@ fun TextSelectionPopup(
 }
 
 /**
- * Clean & minimal floating crop action toolbar.
+ * Clean & minimal floating crop action toolbar styled with white frosted glass and monochrome black accents.
+ * Displays only "画像をシェア" and the adjacent direct share app icon.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CropSelectionPopup(
     modifier: Modifier = Modifier,
     cropSelection: CropSelection?,
     lastShareTarget: ShareTarget?,
+    recentTargets: List<ShareTarget> = emptyList(),
     onShareImageGeneral: () -> Unit,
     onShareImageDirect: (ShareTarget) -> Unit,
-    onCopyImage: () -> Unit,
-    onOcrCrop: () -> Unit,
-    onClear: () -> Unit
+    onOpenAllTargetsPicker: () -> Unit = {}
 ) {
+    var showRecentSlider by remember { mutableStateOf(false) }
+
     AnimatedVisibility(
         visible = cropSelection != null,
-        enter = fadeIn() + slideInVertically(initialOffsetY = { 30 }, animationSpec = spring()),
-        exit = fadeOut() + slideOutVertically(targetOffsetY = { 30 })
+        enter = fadeIn() + slideInVertically(initialOffsetY = { 20 }, animationSpec = spring()),
+        exit = fadeOut() + slideOutVertically(targetOffsetY = { 20 })
     ) {
-        Surface(
-            modifier = modifier
-                .shadow(elevation = 16.dp, shape = CircleShape)
-                .border(
-                    width = 1.dp,
-                    brush = Brush.horizontalGradient(
-                        listOf(Color(0xFF38BDF8), Color(0xFFF472B6))
-                    ),
-                    shape = CircleShape
-                ),
-            shape = CircleShape,
-            color = Color(0xF20F172A),
-            tonalElevation = 10.dp
+        Box(
+            modifier = modifier,
+            contentAlignment = Alignment.BottomCenter
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            RecentShareTargetsSlider(
+                modifier = Modifier
+                    .padding(bottom = 58.dp)
+                    .align(Alignment.BottomCenter),
+                visible = showRecentSlider,
+                recentTargets = recentTargets,
+                isImage = true,
+                onTargetSelected = { target ->
+                    showRecentSlider = false
+                    onShareImageDirect(target)
+                },
+                onOpenAllTargetsPicker = {
+                    showRecentSlider = false
+                    onOpenAllTargetsPicker()
+                },
+                onDismiss = {
+                    showRecentSlider = false
+                }
+            )
+
+            Surface(
+                modifier = Modifier
+                    .shadow(elevation = 14.dp, shape = CircleShape)
+                    .border(
+                        width = 1.dp,
+                        color = Color(0x33000000),
+                        shape = CircleShape
+                    ),
+                shape = CircleShape,
+                color = Color(0xCCFFFFFF),
+                tonalElevation = 8.dp
             ) {
-                // OCR / Extract text inside crop
-                IconButton(
-                    onClick = onOcrCrop,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1E293B))
-                        .testTag("ocr_crop_button")
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DocumentScanner,
-                        contentDescription = "文字を抽出",
-                        tint = Color(0xFF38BDF8),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Copy Image
-                IconButton(
-                    onClick = onCopyImage,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1E293B))
-                        .testTag("copy_crop_image_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "画像をコピー",
-                        tint = Color(0xFFE2E8F0),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Share Image (General)
-                IconButton(
-                    onClick = onShareImageGeneral,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF2563EB))
-                        .testTag("share_crop_general_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = "画像を共有",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Last Direct Share App
-                if (lastShareTarget != null) {
-                    Box(
+                    // Share Image (General)
+                    IconButton(
+                        onClick = onShareImageGeneral,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF1E293B))
-                            .border(1.dp, Color(0xFF334155), CircleShape)
-                            .clickable { onShareImageDirect(lastShareTarget) }
-                            .testTag("direct_share_crop_button"),
-                        contentAlignment = Alignment.Center
+                            .background(Color(0x0F000000))
+                            .testTag("share_crop_general_button")
                     ) {
-                        if (lastShareTarget.iconBitmap != null) {
-                            Image(
-                                bitmap = lastShareTarget.iconBitmap,
-                                contentDescription = "${lastShareTarget.appName} に画像を送信",
-                                modifier = Modifier
-                                    .size(26.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "${lastShareTarget.appName} に画像を送信",
-                                tint = Color(0xFF67E8F9),
-                                modifier = Modifier.size(18.dp)
-                            )
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = "画像を共有",
+                            tint = Color(0xFF0F172A),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    // Last Direct Share App (Slide up for recent history)
+                    if (lastShareTarget != null) {
+                        var totalDragY by remember { mutableFloatStateOf(0f) }
+
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x0F000000))
+                                .border(1.dp, if (showRecentSlider) Color(0xFF0F172A) else Color(0x1F000000), CircleShape)
+                                .pointerInput(Unit) {
+                                    detectDragGestures(
+                                        onDragStart = { totalDragY = 0f },
+                                        onDragEnd = {
+                                            if (totalDragY < -20f) showRecentSlider = true
+                                            totalDragY = 0f
+                                        },
+                                        onDragCancel = { totalDragY = 0f }
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        totalDragY += dragAmount.y
+                                        if (totalDragY < -25f) showRecentSlider = true
+                                    }
+                                }
+                                .combinedClickable(
+                                    onClick = {
+                                        if (showRecentSlider) {
+                                            showRecentSlider = false
+                                        } else {
+                                            onShareImageDirect(lastShareTarget)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        showRecentSlider = !showRecentSlider
+                                    }
+                                )
+                                .testTag("direct_share_crop_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (lastShareTarget.iconBitmap != null) {
+                                Image(
+                                    bitmap = lastShareTarget.iconBitmap,
+                                    contentDescription = "${lastShareTarget.appName} に画像を送信（上にスライドで履歴表示）",
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "${lastShareTarget.appName} に画像を送信（上にスライドで履歴表示）",
+                                    tint = Color(0xFF0F172A),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
-                }
-
-                // Clear Button
-                IconButton(
-                    onClick = onClear,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x1AFFFFFF))
-                        .testTag("clear_crop_selection_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "選択解除",
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(18.dp)
-                    )
                 }
             }
         }

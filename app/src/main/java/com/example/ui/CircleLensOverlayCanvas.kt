@@ -3,6 +3,7 @@ package com.example.ui
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.graphics.RectF
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -10,7 +11,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -74,7 +76,7 @@ fun CircleLensOverlayCanvas(
     onCropFrameUpdated: (RectF, RectF) -> Unit,
     onImageRectCalculated: (RectF) -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "cropGlow")
+    val infiniteTransition = rememberInfiniteTransition(label = "auroraGlow")
     val phase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -83,6 +85,15 @@ fun CircleLensOverlayCanvas(
             repeatMode = RepeatMode.Restart
         ),
         label = "dashPhase"
+    )
+    val pulsePhase by infiniteTransition.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulsePhase"
     )
 
     val currentBitmap by rememberUpdatedState(bitmap)
@@ -105,44 +116,51 @@ fun CircleLensOverlayCanvas(
         modifier = modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { startOffset ->
-                        val bmpW = currentBitmap?.width ?: 1080
-                        val bmpH = currentBitmap?.height ?: 2200
-                        val pinHitRadius = 90f // Generous touch target for pins (~36dp)
-                        val handleHitRadius = 90f // Generous touch target for crop handles (~36dp)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startOffset = down.position
+                    val bmpW = currentBitmap?.width ?: 1080
+                    val bmpH = currentBitmap?.height ?: 2200
+                    val pinHitRadius = 90f // Generous touch target for pins (~36dp)
+                    val handleHitRadius = 90f // Generous touch target for crop handles (~36dp)
 
-                        val activeTextSel = currentTextSelection
-                        // 1. Check Text Selection Pins first with generous touch targets and accurate pin centers
-                        if (activeTextSel != null && activeTextSel.selectedTokens.isNotEmpty()) {
-                            val startPin = activeTextSel.startPinPoint
-                            val endPin = activeTextSel.endPinPoint
+                    var dragTarget = DragTarget.NONE
+                    var localCropHandle = CropHandleType.NONE
+                    var localDragStartCropRect = RectF()
+                    var localDragStartTouch = Offset.Zero
 
-                            // Actual center coordinates of start and end pin heads
-                            val startPinHeadCenter = Offset(startPin.x - 2f, startPin.y - 18f)
-                            val endPinHeadCenter = Offset(endPin.x + 2f, endPin.y + 18f)
+                    val activeTextSel = currentTextSelection
+                    // 1. Check Text Selection Pins first with generous touch targets and accurate pin centers
+                    if (activeTextSel != null && activeTextSel.selectedTokens.isNotEmpty()) {
+                        val startPin = activeTextSel.startPinPoint
+                        val endPin = activeTextSel.endPinPoint
 
-                            val distToStartPin = min(
-                                hypot((startOffset.x - startPinHeadCenter.x).toDouble(), (startOffset.y - startPinHeadCenter.y).toDouble()).toFloat(),
-                                hypot((startOffset.x - startPin.x).toDouble(), (startOffset.y - startPin.y).toDouble()).toFloat()
-                            )
-                            val distToEndPin = min(
-                                hypot((startOffset.x - endPinHeadCenter.x).toDouble(), (startOffset.y - endPinHeadCenter.y).toDouble()).toFloat(),
-                                hypot((startOffset.x - endPin.x).toDouble(), (startOffset.y - endPin.y).toDouble()).toFloat()
-                            )
+                        // Actual center coordinates of start and end pin heads
+                        val startPinHeadCenter = Offset(startPin.x - 2f, startPin.y - 18f)
+                        val endPinHeadCenter = Offset(endPin.x + 2f, endPin.y + 18f)
 
-                            if (distToStartPin < pinHitRadius && distToStartPin <= distToEndPin) {
-                                currentDragTarget = DragTarget.START_PIN
-                                currentDragStartPin(startOffset, currentDisplayImageRect, bmpW, bmpH)
-                                return@detectDragGestures
-                            } else if (distToEndPin < pinHitRadius) {
-                                currentDragTarget = DragTarget.END_PIN
-                                currentDragEndPin(startOffset, currentDisplayImageRect, bmpW, bmpH)
-                                return@detectDragGestures
-                            }
+                        val distToStartPin = min(
+                            hypot((startOffset.x - startPinHeadCenter.x).toDouble(), (startOffset.y - startPinHeadCenter.y).toDouble()).toFloat(),
+                            hypot((startOffset.x - startPin.x).toDouble(), (startOffset.y - startPin.y).toDouble()).toFloat()
+                        )
+                        val distToEndPin = min(
+                            hypot((startOffset.x - endPinHeadCenter.x).toDouble(), (startOffset.y - endPinHeadCenter.y).toDouble()).toFloat(),
+                            hypot((startOffset.x - endPin.x).toDouble(), (startOffset.y - endPin.y).toDouble()).toFloat()
+                        )
+
+                        if (distToStartPin < pinHitRadius && distToStartPin <= distToEndPin) {
+                            dragTarget = DragTarget.START_PIN
+                            currentDragTarget = DragTarget.START_PIN
+                            currentDragStartPin(startOffset, currentDisplayImageRect, bmpW, bmpH)
+                        } else if (distToEndPin < pinHitRadius) {
+                            dragTarget = DragTarget.END_PIN
+                            currentDragTarget = DragTarget.END_PIN
+                            currentDragEndPin(startOffset, currentDisplayImageRect, bmpW, bmpH)
                         }
+                    }
 
-                        // 2. Check Crop Selection Handles
+                    // 2. Check Crop Selection Handles or Crop Area
+                    if (dragTarget == DragTarget.NONE) {
                         val crop = currentCropSelection?.rect
                         if (crop != null && !crop.isEmpty) {
                             val tl = Offset(crop.left, crop.top)
@@ -155,7 +173,7 @@ fun CircleLensOverlayCanvas(
                             val distBL = hypot((startOffset.x - bl.x).toDouble(), (startOffset.y - bl.y).toDouble()).toFloat()
                             val distBR = hypot((startOffset.x - br.x).toDouble(), (startOffset.y - br.y).toDouble()).toFloat()
 
-                            activeCropHandle = when {
+                            localCropHandle = when {
                                 distTL < handleHitRadius && distTL <= min(distTR, min(distBL, distBR)) -> CropHandleType.TOP_LEFT
                                 distTR < handleHitRadius && distTR <= min(distTL, min(distBL, distBR)) -> CropHandleType.TOP_RIGHT
                                 distBL < handleHitRadius && distBL <= min(distTL, min(distTR, distBR)) -> CropHandleType.BOTTOM_LEFT
@@ -169,125 +187,132 @@ fun CircleLensOverlayCanvas(
                                 else -> CropHandleType.NONE
                             }
 
-                            if (activeCropHandle != CropHandleType.NONE) {
+                            if (localCropHandle != CropHandleType.NONE) {
+                                dragTarget = DragTarget.CROP_HANDLE
                                 currentDragTarget = DragTarget.CROP_HANDLE
+                                activeCropHandle = localCropHandle
+                                localDragStartCropRect = RectF(crop)
+                                localDragStartTouch = startOffset
                                 dragStartCropRect = RectF(crop)
                                 dragStartTouch = startOffset
-                                return@detectDragGestures
                             }
                         }
+                    }
 
-                        // 3. Otherwise, start drawing stroke
+                    // 3. Otherwise, treat as drawing stroke or tap
+                    if (dragTarget == DragTarget.NONE) {
+                        dragTarget = DragTarget.DRAWING_STROKE
                         currentDragTarget = DragTarget.DRAWING_STROKE
                         activeCropHandle = CropHandleType.NONE
                         currentStrokeStart(startOffset)
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        val currentPos = change.position
-                        val bmpW = currentBitmap?.width ?: 1080
-                        val bmpH = currentBitmap?.height ?: 2200
-
-                        when (currentDragTarget) {
-                            DragTarget.START_PIN -> {
-                                currentDragStartPin(currentPos, currentDisplayImageRect, bmpW, bmpH)
-                            }
-                            DragTarget.END_PIN -> {
-                                currentDragEndPin(currentPos, currentDisplayImageRect, bmpW, bmpH)
-                            }
-                            DragTarget.CROP_HANDLE -> {
-                                val dx = currentPos.x - dragStartTouch.x
-                                val dy = currentPos.y - dragStartTouch.y
-                                val base = dragStartCropRect
-                                val minSize = 60f
-
-                                val newRect = when (activeCropHandle) {
-                                    CropHandleType.TOP_LEFT -> RectF(
-                                        min(base.right - minSize, base.left + dx),
-                                        min(base.bottom - minSize, base.top + dy),
-                                        base.right,
-                                        base.bottom
-                                    )
-                                    CropHandleType.TOP_RIGHT -> RectF(
-                                        base.left,
-                                        min(base.bottom - minSize, base.top + dy),
-                                        max(base.left + minSize, base.right + dx),
-                                        base.bottom
-                                    )
-                                    CropHandleType.BOTTOM_LEFT -> RectF(
-                                        min(base.right - minSize, base.left + dx),
-                                        base.top,
-                                        base.right,
-                                        max(base.top + minSize, base.bottom + dy)
-                                    )
-                                    CropHandleType.BOTTOM_RIGHT -> RectF(
-                                        base.left,
-                                        base.top,
-                                        max(base.left + minSize, base.right + dx),
-                                        max(base.top + minSize, base.bottom + dy)
-                                    )
-                                    CropHandleType.TOP_EDGE -> RectF(
-                                        base.left,
-                                        min(base.bottom - minSize, base.top + dy),
-                                        base.right,
-                                        base.bottom
-                                    )
-                                    CropHandleType.BOTTOM_EDGE -> RectF(
-                                        base.left,
-                                        base.top,
-                                        base.right,
-                                        max(base.top + minSize, base.bottom + dy)
-                                    )
-                                    CropHandleType.LEFT_EDGE -> RectF(
-                                        min(base.right - minSize, base.left + dx),
-                                        base.top,
-                                        base.right,
-                                        base.bottom
-                                    )
-                                    CropHandleType.RIGHT_EDGE -> RectF(
-                                        base.left,
-                                        base.top,
-                                        max(base.left + minSize, base.right + dx),
-                                        base.bottom
-                                    )
-                                    CropHandleType.MOVE -> {
-                                        val w = base.width()
-                                        val h = base.height()
-                                        val l = base.left + dx
-                                        val t = base.top + dy
-                                        RectF(l, t, l + w, t + h)
-                                    }
-                                    else -> base
-                                }
-
-                                val clamped = RectF(
-                                    max(currentDisplayImageRect.left, newRect.left),
-                                    max(currentDisplayImageRect.top, newRect.top),
-                                    min(currentDisplayImageRect.right, newRect.right),
-                                    min(currentDisplayImageRect.bottom, newRect.bottom)
-                                )
-                                currentCropFrameUpdated(clamped, currentDisplayImageRect)
-                            }
-                            DragTarget.DRAWING_STROKE -> {
-                                currentStrokeMove(currentPos, currentDisplayImageRect, bmpW, bmpH)
-                            }
-                            DragTarget.NONE -> {}
-                        }
-                    },
-                    onDragEnd = {
-                        val bmpW = currentBitmap?.width ?: 1080
-                        val bmpH = currentBitmap?.height ?: 2200
-                        if (currentDragTarget == DragTarget.DRAWING_STROKE) {
-                            currentStrokeEnd(currentDisplayImageRect, bmpW, bmpH)
-                        }
-                        currentDragTarget = DragTarget.NONE
-                        activeCropHandle = CropHandleType.NONE
-                    },
-                    onDragCancel = {
-                        currentDragTarget = DragTarget.NONE
-                        activeCropHandle = CropHandleType.NONE
                     }
-                )
+
+                    var currentPos = startOffset
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+
+                        if (change.pressed) {
+                            currentPos = change.position
+                            change.consume()
+
+                            when (dragTarget) {
+                                DragTarget.START_PIN -> {
+                                    currentDragStartPin(currentPos, currentDisplayImageRect, bmpW, bmpH)
+                                }
+                                DragTarget.END_PIN -> {
+                                    currentDragEndPin(currentPos, currentDisplayImageRect, bmpW, bmpH)
+                                }
+                                DragTarget.CROP_HANDLE -> {
+                                    val dx = currentPos.x - localDragStartTouch.x
+                                    val dy = currentPos.y - localDragStartTouch.y
+                                    val base = localDragStartCropRect
+                                    val minSize = 60f
+
+                                    val newRect = when (localCropHandle) {
+                                        CropHandleType.TOP_LEFT -> RectF(
+                                            min(base.right - minSize, base.left + dx),
+                                            min(base.bottom - minSize, base.top + dy),
+                                            base.right,
+                                            base.bottom
+                                        )
+                                        CropHandleType.TOP_RIGHT -> RectF(
+                                            base.left,
+                                            min(base.bottom - minSize, base.top + dy),
+                                            max(base.left + minSize, base.right + dx),
+                                            base.bottom
+                                        )
+                                        CropHandleType.BOTTOM_LEFT -> RectF(
+                                            min(base.right - minSize, base.left + dx),
+                                            base.top,
+                                            base.right,
+                                            max(base.top + minSize, base.bottom + dy)
+                                        )
+                                        CropHandleType.BOTTOM_RIGHT -> RectF(
+                                            base.left,
+                                            base.top,
+                                            max(base.left + minSize, base.right + dx),
+                                            max(base.top + minSize, base.bottom + dy)
+                                        )
+                                        CropHandleType.TOP_EDGE -> RectF(
+                                            base.left,
+                                            min(base.bottom - minSize, base.top + dy),
+                                            base.right,
+                                            base.bottom
+                                        )
+                                        CropHandleType.BOTTOM_EDGE -> RectF(
+                                            base.left,
+                                            base.top,
+                                            base.right,
+                                            max(base.top + minSize, base.bottom + dy)
+                                        )
+                                        CropHandleType.LEFT_EDGE -> RectF(
+                                            min(base.right - minSize, base.left + dx),
+                                            base.top,
+                                            base.right,
+                                            base.bottom
+                                        )
+                                        CropHandleType.RIGHT_EDGE -> RectF(
+                                            base.left,
+                                            base.top,
+                                            max(base.left + minSize, base.right + dx),
+                                            base.bottom
+                                        )
+                                        CropHandleType.MOVE -> {
+                                            val w = base.width()
+                                            val h = base.height()
+                                            val l = base.left + dx
+                                            val t = base.top + dy
+                                            RectF(l, t, l + w, t + h)
+                                        }
+                                        else -> base
+                                    }
+
+                                    val clamped = RectF(
+                                        max(currentDisplayImageRect.left, newRect.left),
+                                        max(currentDisplayImageRect.top, newRect.top),
+                                        min(currentDisplayImageRect.right, newRect.right),
+                                        min(currentDisplayImageRect.bottom, newRect.bottom)
+                                    )
+                                    currentCropFrameUpdated(clamped, currentDisplayImageRect)
+                                }
+                                DragTarget.DRAWING_STROKE -> {
+                                    currentStrokeMove(currentPos, currentDisplayImageRect, bmpW, bmpH)
+                                }
+                                DragTarget.NONE -> {}
+                            }
+                        } else {
+                            // Released
+                            change.consume()
+                            if (dragTarget == DragTarget.DRAWING_STROKE) {
+                                currentStrokeEnd(currentDisplayImageRect, bmpW, bmpH)
+                            }
+                            currentDragTarget = DragTarget.NONE
+                            activeCropHandle = CropHandleType.NONE
+                            break
+                        }
+                    }
+                }
             }
     ) {
         val canvasWidth = size.width
@@ -322,29 +347,96 @@ fun CircleLensOverlayCanvas(
                 size = Size(destWidth, destHeight)
             )
 
-            // Animated glowing perimeter border to clearly indicate overlay mode is active
-            val glowBrush = Brush.sweepGradient(
+            // 1. Organic Misty Aurora / Fog Glowing Perimeter ("もやもや" effect from Google Circle to Search)
+            val baseRadius = max(destWidth, destHeight) * 0.55f
+
+            // Top-Left Cyan / Sky Blue Misty Blob
+            val tlRadius = baseRadius * pulsePhase
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0x8C2563EB),
+                        Color(0x6638BDF8),
+                        Color(0x3360A5FA),
+                        Color(0x1038BDF8),
+                        Color(0x002563EB)
+                    ),
+                    center = Offset(destLeft + destWidth * 0.05f, destTop + destHeight * 0.08f),
+                    radius = tlRadius
+                ),
+                topLeft = Offset(destLeft, destTop),
+                size = Size(destWidth, destHeight)
+            )
+
+            // Right-side & Top-Right Warm Amber / Gold Misty Blob
+            val trRadius = baseRadius * (2.1f - pulsePhase)
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0x90F59E0B),
+                        Color(0x66EAB308),
+                        Color(0x33F97316),
+                        Color(0x10F59E0B),
+                        Color(0x00F59E0B)
+                    ),
+                    center = Offset(destLeft + destWidth * 0.96f, destTop + destHeight * 0.32f),
+                    radius = trRadius
+                ),
+                topLeft = Offset(destLeft, destTop),
+                size = Size(destWidth, destHeight)
+            )
+
+            // Bottom-Right / Bottom Emerald Green & Teal Misty Blob
+            val brRadius = baseRadius * pulsePhase
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0x8C10B981),
+                        Color(0x6014B8A6),
+                        Color(0x30059669),
+                        Color(0x1010B981),
+                        Color(0x0010B981)
+                    ),
+                    center = Offset(destLeft + destWidth * 0.88f, destTop + destHeight * 0.90f),
+                    radius = brRadius
+                ),
+                topLeft = Offset(destLeft, destTop),
+                size = Size(destWidth, destHeight)
+            )
+
+            // Bottom-Left Cyan / Teal Misty Blob
+            val blRadius = baseRadius * (2.05f - pulsePhase)
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0x7506B6D4),
+                        Color(0x4D10B981),
+                        Color(0x2038BDF8),
+                        Color(0x0006B6D4)
+                    ),
+                    center = Offset(destLeft + destWidth * 0.12f, destTop + destHeight * 0.88f),
+                    radius = blRadius
+                ),
+                topLeft = Offset(destLeft, destTop),
+                size = Size(destWidth, destHeight)
+            )
+
+            // Outer border line connecting the aurora colors
+            val borderBrush = Brush.sweepGradient(
                 colors = listOf(
                     Color(0xFF38BDF8),
-                    Color(0xFF818CF8),
-                    Color(0xFFF472B6),
+                    Color(0xFFF59E0B),
+                    Color(0xFF10B981),
+                    Color(0xFF06B6D4),
                     Color(0xFF38BDF8)
                 ),
                 center = Offset(canvasWidth / 2f, canvasHeight / 2f)
             )
-            // Outer glow line
             drawRect(
-                brush = glowBrush,
+                brush = borderBrush,
                 topLeft = Offset(destLeft + 1f, destTop + 1f),
                 size = Size(destWidth - 2f, destHeight - 2f),
                 style = Stroke(width = 3.5f)
-            )
-            // Inner soft ambient edge line
-            drawRect(
-                color = Color(0x3338BDF8),
-                topLeft = Offset(destLeft + 4f, destTop + 4f),
-                size = Size(destWidth - 8f, destHeight - 8f),
-                style = Stroke(width = 2f)
             )
 
             val scaleX = destWidth / bmpWidth

@@ -39,6 +39,12 @@ class ShareManager private constructor(context: Context) {
     private val _lastImageShareTarget = MutableStateFlow<ShareTarget?>(null)
     val lastImageShareTarget: StateFlow<ShareTarget?> = _lastImageShareTarget.asStateFlow()
 
+    private val _recentTextShareTargets = MutableStateFlow<List<ShareTarget>>(emptyList())
+    val recentTextShareTargets: StateFlow<List<ShareTarget>> = _recentTextShareTargets.asStateFlow()
+
+    private val _recentImageShareTargets = MutableStateFlow<List<ShareTarget>>(emptyList())
+    val recentImageShareTargets: StateFlow<List<ShareTarget>> = _recentImageShareTargets.asStateFlow()
+
     init {
         loadPersistedTargets()
     }
@@ -55,33 +61,54 @@ class ShareManager private constructor(context: Context) {
     }
 
     private fun loadPersistedTargets() {
-        val textPkg = prefs.getString("last_text_pkg", null)
-        val textAct = prefs.getString("last_text_act", null)
-        if (textPkg != null) {
-            val target = resolveTarget(textPkg, textAct, "text/plain")
-            if (target != null) {
-                _lastTextShareTarget.value = target
-            } else {
-                _lastTextShareTarget.value = getAvailableShareTargets("text/plain").firstOrNull()
-            }
-        } else {
-            val defaultTarget = getAvailableShareTargets("text/plain").firstOrNull()
-            _lastTextShareTarget.value = defaultTarget
-        }
+        val availableText = getAvailableShareTargets("text/plain")
+        val availableImg = getAvailableShareTargets("image/*")
 
-        val imgPkg = prefs.getString("last_img_pkg", null)
-        val imgAct = prefs.getString("last_img_act", null)
-        if (imgPkg != null) {
-            val target = resolveTarget(imgPkg, imgAct, "image/png")
-            if (target != null) {
-                _lastImageShareTarget.value = target
-            } else {
-                _lastImageShareTarget.value = getAvailableShareTargets("image/*").firstOrNull()
+        // Load Text History
+        val textHistoryRaw = prefs.getString("recent_text_history", null)
+        val textTargets = mutableListOf<ShareTarget>()
+        if (!textHistoryRaw.isNullOrBlank()) {
+            val entries = textHistoryRaw.split("|")
+            for (entry in entries) {
+                val parts = entry.split(";")
+                if (parts.isNotEmpty()) {
+                    val pkg = parts[0]
+                    val act = if (parts.size > 1 && parts[1].isNotBlank()) parts[1] else null
+                    val resolved = resolveTarget(pkg, act, "text/plain")
+                    if (resolved != null && textTargets.none { it.packageName == pkg && it.activityName == act }) {
+                        textTargets.add(resolved)
+                    }
+                }
             }
-        } else {
-            val defaultTarget = getAvailableShareTargets("image/*").firstOrNull()
-            _lastImageShareTarget.value = defaultTarget
         }
+        if (textTargets.isEmpty()) {
+            textTargets.addAll(availableText.take(5))
+        }
+        _recentTextShareTargets.value = textTargets
+        _lastTextShareTarget.value = textTargets.firstOrNull() ?: availableText.firstOrNull()
+
+        // Load Image History
+        val imgHistoryRaw = prefs.getString("recent_img_history", null)
+        val imgTargets = mutableListOf<ShareTarget>()
+        if (!imgHistoryRaw.isNullOrBlank()) {
+            val entries = imgHistoryRaw.split("|")
+            for (entry in entries) {
+                val parts = entry.split(";")
+                if (parts.isNotEmpty()) {
+                    val pkg = parts[0]
+                    val act = if (parts.size > 1 && parts[1].isNotBlank()) parts[1] else null
+                    val resolved = resolveTarget(pkg, act, "image/png")
+                    if (resolved != null && imgTargets.none { it.packageName == pkg && it.activityName == act }) {
+                        imgTargets.add(resolved)
+                    }
+                }
+            }
+        }
+        if (imgTargets.isEmpty()) {
+            imgTargets.addAll(availableImg.take(5))
+        }
+        _recentImageShareTargets.value = imgTargets
+        _lastImageShareTarget.value = imgTargets.firstOrNull() ?: availableImg.firstOrNull()
     }
 
     fun getAvailableShareTargets(mimeType: String): List<ShareTarget> {
@@ -158,15 +185,31 @@ class ShareManager private constructor(context: Context) {
     fun updateLastShareTarget(target: ShareTarget, isImage: Boolean) {
         if (isImage) {
             _lastImageShareTarget.value = target
+            val currentList = _recentImageShareTargets.value.toMutableList()
+            currentList.removeAll { it.packageName == target.packageName && it.activityName == target.activityName }
+            currentList.add(0, target)
+            val trimmed = currentList.take(10)
+            _recentImageShareTargets.value = trimmed
+
+            val serialized = trimmed.joinToString("|") { "${it.packageName};${it.activityName ?: ""}" }
             prefs.edit()
                 .putString("last_img_pkg", target.packageName)
                 .putString("last_img_act", target.activityName)
+                .putString("recent_img_history", serialized)
                 .apply()
         } else {
             _lastTextShareTarget.value = target
+            val currentList = _recentTextShareTargets.value.toMutableList()
+            currentList.removeAll { it.packageName == target.packageName && it.activityName == target.activityName }
+            currentList.add(0, target)
+            val trimmed = currentList.take(10)
+            _recentTextShareTargets.value = trimmed
+
+            val serialized = trimmed.joinToString("|") { "${it.packageName};${it.activityName ?: ""}" }
             prefs.edit()
                 .putString("last_text_pkg", target.packageName)
                 .putString("last_text_act", target.activityName)
+                .putString("recent_text_history", serialized)
                 .apply()
         }
     }

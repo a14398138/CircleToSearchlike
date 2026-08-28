@@ -43,6 +43,8 @@ data class CircleLensUiState(
     val trailPoints: List<TrailPoint> = emptyList(),
     val lastTextShareTarget: ShareTarget? = null,
     val lastImageShareTarget: ShareTarget? = null,
+    val recentTextTargets: List<ShareTarget> = emptyList(),
+    val recentImageTargets: List<ShareTarget> = emptyList(),
     val availableTextTargets: List<ShareTarget> = emptyList(),
     val availableImageTargets: List<ShareTarget> = emptyList(),
     val showTargetPickerSheet: Boolean = false,
@@ -65,7 +67,7 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
     private var isRealBitmapLoaded: Boolean = false
 
     init {
-        // Observe share targets
+        // Observe share targets and recent history
         viewModelScope.launch {
             shareManager.lastTextShareTarget.collect { target ->
                 _uiState.value = _uiState.value.copy(lastTextShareTarget = target)
@@ -74,6 +76,16 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             shareManager.lastImageShareTarget.collect { target ->
                 _uiState.value = _uiState.value.copy(lastImageShareTarget = target)
+            }
+        }
+        viewModelScope.launch {
+            shareManager.recentTextShareTargets.collect { list ->
+                _uiState.value = _uiState.value.copy(recentTextTargets = list)
+            }
+        }
+        viewModelScope.launch {
+            shareManager.recentImageShareTargets.collect { list ->
+                _uiState.value = _uiState.value.copy(recentImageTargets = list)
             }
         }
 
@@ -273,10 +285,17 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
         val finalSelection = if (range != null) {
             buildTextSelection(range.first, range.second, imageRectOnDisplay, bitmapWidth, bitmapHeight)
         } else if (points.size <= 8) {
-            // Tap fallback on single word
-            val closest = GestureProcessor.findClosestToken(points.last(), state.allTokens, transform)
+            // Tap check on single word - only if tapped closely on the word (within ~24px proximity)
+            val tapPt = points.last()
+            val closest = GestureProcessor.findClosestToken(tapPt, state.allTokens, transform)
             if (closest != null) {
-                buildTextSelection(closest.globalIndex, closest.globalIndex, imageRectOnDisplay, bitmapWidth, bitmapHeight)
+                val box = transform(closest.boundingBox)
+                val isNear = (tapPt.x in (box.left - 24f)..(box.right + 24f)) && (tapPt.y in (box.top - 16f)..(box.bottom + 16f))
+                if (isNear) {
+                    buildTextSelection(closest.globalIndex, closest.globalIndex, imageRectOnDisplay, bitmapWidth, bitmapHeight)
+                } else {
+                    null // Tapped away from text -> clear selection
+                }
             } else {
                 null
             }
@@ -284,11 +303,23 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
             null
         }
 
+        // Tap outside crop rect clears the active crop
+        val tapPt = points.last()
+        val tappedInsideCrop = state.activeCropSelection?.rect?.let { r ->
+            tapPt.x in (r.left - 10f)..(r.right + 10f) && tapPt.y in (r.top - 10f)..(r.bottom + 10f)
+        } ?: false
+
+        val newCropSelection = if (finalSelection != null || !tappedInsideCrop) {
+            null
+        } else {
+            state.activeCropSelection
+        }
+
         _uiState.value = _uiState.value.copy(
             activeStrokePoints = emptyList(),
             trailPoints = emptyList(),
             textSelection = finalSelection,
-            activeCropSelection = if (finalSelection != null) null else state.activeCropSelection
+            activeCropSelection = newCropSelection
         )
     }
 
