@@ -160,16 +160,25 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
         )
 
         activeLoadJob = viewModelScope.launch {
-            val ocrResults = ocrManager.recognizeText(bitmap)
-            val flatTokens = ocrResults.flatMap { it.tokens }
+            try {
+                val ocrResults = ocrManager.recognizeText(bitmap)
+                val flatTokens = ocrResults.flatMap { it.tokens }
 
-            _uiState.value = _uiState.value.copy(
-                currentBitmap = bitmap,
-                ocrItems = ocrResults,
-                allTokens = flatTokens,
-                isOcrRunning = false,
-                feedbackMessage = null
-            )
+                _uiState.value = _uiState.value.copy(
+                    currentBitmap = bitmap,
+                    ocrItems = ocrResults,
+                    allTokens = flatTokens,
+                    isOcrRunning = false,
+                    feedbackMessage = null
+                )
+            } catch (e: Throwable) {
+                Log.e("CircleLensVM", "OCR execution error", e)
+                _uiState.value = _uiState.value.copy(
+                    currentBitmap = bitmap,
+                    isOcrRunning = false,
+                    feedbackMessage = null
+                )
+            }
         }
     }
 
@@ -195,15 +204,24 @@ class CircleLensViewModel(application: Application) : AndroidViewModel(applicati
             }
 
             if (bitmap != null) {
-                val ocrResults = ocrManager.recognizeText(bitmap)
-                val flatTokens = ocrResults.flatMap { it.tokens }
-                _uiState.value = _uiState.value.copy(
-                    currentBitmap = bitmap,
-                    ocrItems = ocrResults,
-                    allTokens = flatTokens,
-                    isOcrRunning = false,
-                    feedbackMessage = "OCR解析が完了しました (${flatTokens.size}要素 検出)"
-                )
+                try {
+                    val ocrResults = ocrManager.recognizeText(bitmap)
+                    val flatTokens = ocrResults.flatMap { it.tokens }
+                    _uiState.value = _uiState.value.copy(
+                        currentBitmap = bitmap,
+                        ocrItems = ocrResults,
+                        allTokens = flatTokens,
+                        isOcrRunning = false,
+                        feedbackMessage = "OCR解析が完了しました (${flatTokens.size}要素 検出)"
+                    )
+                } catch (e: Throwable) {
+                    Log.e("CircleLensVM", "OCR error for URI image", e)
+                    _uiState.value = _uiState.value.copy(
+                        currentBitmap = bitmap,
+                        isOcrRunning = false,
+                        feedbackMessage = null
+                    )
+                }
             } else {
                 _uiState.value = _uiState.value.copy(
                     isOcrRunning = false,
