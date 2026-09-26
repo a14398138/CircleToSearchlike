@@ -43,12 +43,12 @@ fun CircleLensBottomBar(
     modifier: Modifier = Modifier,
     isReady: Boolean = true,
     isOcrRunning: Boolean = false,
+    isSelectionActive: Boolean = false,
     lastShareTarget: ShareTarget?,
     recentTargets: List<ShareTarget> = emptyList(),
     onSelectAllText: () -> Unit,
     onShareEntireScreenGeneral: () -> Unit,
-    onShareEntireScreenDirect: (ShareTarget) -> Unit,
-    onOpenAllTargetsPicker: () -> Unit = {}
+    onShareEntireScreenDirect: (ShareTarget) -> Unit
 ) {
     // State for showing recent apps vertical slider
     var showRecentSlider by remember { mutableStateOf(false) }
@@ -69,9 +69,9 @@ fun CircleLensBottomBar(
                 showRecentSlider = false
                 onShareEntireScreenDirect(target)
             },
-            onOpenAllTargetsPicker = {
+            onShareWithOtherApps = {
                 showRecentSlider = false
-                onOpenAllTargetsPicker()
+                onShareEntireScreenGeneral()
             },
             onDismiss = {
                 showRecentSlider = false
@@ -80,6 +80,7 @@ fun CircleLensBottomBar(
 
         Surface(
             modifier = Modifier
+                .alpha(if (isSelectionActive) 0.4f else 1f)
                 .shadow(elevation = 14.dp, shape = CircleShape)
                 .border(
                     width = 1.dp,
