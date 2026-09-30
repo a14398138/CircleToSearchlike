@@ -45,6 +45,21 @@ class ShareManager private constructor(context: Context) {
     private val _recentImageShareTargets = MutableStateFlow<List<ShareTarget>>(emptyList())
     val recentImageShareTargets: StateFlow<List<ShareTarget>> = _recentImageShareTargets.asStateFlow()
 
+    private var usedTextTargets = emptyList<ShareTarget>()
+    private var usedImageTargets = emptyList<ShareTarget>()
+
+    // Show these installed share targets first; used apps accumulate ahead of them.
+    private val initialPackages = listOf(
+        "com.google.android.apps.bard", // Gemini
+        "com.openai.chatgpt",
+        "com.anthropic.claude"
+    )
+
+    private fun displayedTargets(used: List<ShareTarget>, available: List<ShareTarget>): List<ShareTarget> =
+        (used + initialPackages.mapNotNull { pkg -> available.firstOrNull { it.packageName == pkg } })
+            .distinctBy { it.packageName }
+            .take(10)
+
     init {
         loadPersistedTargets()
     }
@@ -81,11 +96,9 @@ class ShareManager private constructor(context: Context) {
                 }
             }
         }
-        if (textTargets.isEmpty()) {
-            textTargets.addAll(availableText.take(5))
-        }
-        _recentTextShareTargets.value = textTargets
-        _lastTextShareTarget.value = textTargets.firstOrNull() ?: availableText.firstOrNull()
+        usedTextTargets = textTargets
+        _recentTextShareTargets.value = displayedTargets(textTargets, availableText)
+        _lastTextShareTarget.value = _recentTextShareTargets.value.firstOrNull()
 
         // Load Image History
         val imgHistoryRaw = prefs.getString("recent_img_history", null)
@@ -104,11 +117,9 @@ class ShareManager private constructor(context: Context) {
                 }
             }
         }
-        if (imgTargets.isEmpty()) {
-            imgTargets.addAll(availableImg.take(5))
-        }
-        _recentImageShareTargets.value = imgTargets
-        _lastImageShareTarget.value = imgTargets.firstOrNull() ?: availableImg.firstOrNull()
+        usedImageTargets = imgTargets
+        _recentImageShareTargets.value = displayedTargets(imgTargets, availableImg)
+        _lastImageShareTarget.value = _recentImageShareTargets.value.firstOrNull()
     }
 
     fun getAvailableShareTargets(mimeType: String): List<ShareTarget> {
@@ -185,11 +196,12 @@ class ShareManager private constructor(context: Context) {
     fun updateLastShareTarget(target: ShareTarget, isImage: Boolean) {
         if (isImage) {
             _lastImageShareTarget.value = target
-            val currentList = _recentImageShareTargets.value.toMutableList()
-            currentList.removeAll { it.packageName == target.packageName && it.activityName == target.activityName }
+            val currentList = usedImageTargets.toMutableList()
+            currentList.removeAll { it.packageName == target.packageName }
             currentList.add(0, target)
             val trimmed = currentList.take(10)
-            _recentImageShareTargets.value = trimmed
+            usedImageTargets = trimmed
+            _recentImageShareTargets.value = displayedTargets(trimmed, getAvailableShareTargets("image/*"))
 
             val serialized = trimmed.joinToString("|") { "${it.packageName};${it.activityName ?: ""}" }
             prefs.edit()
@@ -199,11 +211,12 @@ class ShareManager private constructor(context: Context) {
                 .apply()
         } else {
             _lastTextShareTarget.value = target
-            val currentList = _recentTextShareTargets.value.toMutableList()
-            currentList.removeAll { it.packageName == target.packageName && it.activityName == target.activityName }
+            val currentList = usedTextTargets.toMutableList()
+            currentList.removeAll { it.packageName == target.packageName }
             currentList.add(0, target)
             val trimmed = currentList.take(10)
-            _recentTextShareTargets.value = trimmed
+            usedTextTargets = trimmed
+            _recentTextShareTargets.value = displayedTargets(trimmed, getAvailableShareTargets("text/plain"))
 
             val serialized = trimmed.joinToString("|") { "${it.packageName};${it.activityName ?: ""}" }
             prefs.edit()

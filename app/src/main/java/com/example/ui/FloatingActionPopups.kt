@@ -56,8 +56,7 @@ fun TextSelectionPopup(
     recentTargets: List<ShareTarget> = emptyList(),
     onCopy: () -> Unit,
     onShareGeneral: () -> Unit,
-    onShareDirect: (ShareTarget) -> Unit,
-    onOpenAllTargetsPicker: () -> Unit = {}
+    onShareDirect: (ShareTarget) -> Unit
 ) {
     var showRecentSlider by remember { mutableStateOf(false) }
 
@@ -81,9 +80,9 @@ fun TextSelectionPopup(
                     showRecentSlider = false
                     onShareDirect(target)
                 },
-                onOpenAllTargetsPicker = {
+                onShareWithOtherApps = {
                     showRecentSlider = false
-                    onOpenAllTargetsPicker()
+                    onShareGeneral()
                 },
                 onDismiss = {
                     showRecentSlider = false
@@ -216,8 +215,7 @@ fun CropSelectionPopup(
     lastShareTarget: ShareTarget?,
     recentTargets: List<ShareTarget> = emptyList(),
     onShareImageGeneral: () -> Unit,
-    onShareImageDirect: (ShareTarget) -> Unit,
-    onOpenAllTargetsPicker: () -> Unit = {}
+    onShareImageDirect: (ShareTarget) -> Unit
 ) {
     var showRecentSlider by remember { mutableStateOf(false) }
 
@@ -241,9 +239,9 @@ fun CropSelectionPopup(
                     showRecentSlider = false
                     onShareImageDirect(target)
                 },
-                onOpenAllTargetsPicker = {
+                onShareWithOtherApps = {
                     showRecentSlider = false
-                    onOpenAllTargetsPicker()
+                    onShareImageGeneral()
                 },
                 onDismiss = {
                     showRecentSlider = false

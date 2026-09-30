@@ -167,9 +167,6 @@ fun CircleLensScreen(
                     onShareDirect = { target ->
                         viewModel.shareSelectedText(target)
                     },
-                    onOpenAllTargetsPicker = {
-                        viewModel.showTargetPicker(true, isImage = false)
-                    }
                 )
             }
         }
@@ -208,9 +205,6 @@ fun CircleLensScreen(
                     onShareImageDirect = { target ->
                         viewModel.shareCroppedImage(target)
                     },
-                    onOpenAllTargetsPicker = {
-                        viewModel.showTargetPicker(true, isImage = true)
-                    }
                 )
             }
         }
@@ -223,6 +217,8 @@ fun CircleLensScreen(
                 .padding(bottom = 16.dp),
             isReady = uiState.currentBitmap != null,
             isOcrRunning = uiState.isOcrRunning,
+            isSelectionActive = uiState.activeCropSelection != null ||
+                uiState.textSelection != null || uiState.activeStrokePoints.isNotEmpty(),
             lastShareTarget = uiState.lastImageShareTarget ?: uiState.lastTextShareTarget,
             recentTargets = uiState.recentImageTargets,
             onSelectAllText = {
@@ -235,9 +231,6 @@ fun CircleLensScreen(
             },
             onShareEntireScreenDirect = { target ->
                 viewModel.shareEntireScreen(target)
-            },
-            onOpenAllTargetsPicker = {
-                viewModel.showTargetPicker(true, isImage = true)
             }
         )
 

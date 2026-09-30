@@ -18,12 +18,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
@@ -48,7 +51,7 @@ import com.example.model.ShareTarget
 
 /**
  * Vertical slider popup in clean white frosted glass and monochrome black accents.
- * Displays recently used share targets in descending chronological order (newest on top).
+ * Displays recent choices first, followed by installed starter targets.
  */
 @Composable
 fun RecentShareTargetsSlider(
@@ -57,7 +60,7 @@ fun RecentShareTargetsSlider(
     recentTargets: List<ShareTarget>,
     isImage: Boolean,
     onTargetSelected: (ShareTarget) -> Unit,
-    onOpenAllTargetsPicker: () -> Unit,
+    onShareWithOtherApps: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AnimatedVisibility(
@@ -108,7 +111,7 @@ fun RecentShareTargetsSlider(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "送信先履歴 (新しい順)",
+                            text = "送信先",
                             style = MaterialTheme.typography.labelMedium.copy(
                                 color = Color(0xFF0F172A),
                                 fontWeight = FontWeight.Bold,
@@ -136,8 +139,8 @@ fun RecentShareTargetsSlider(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // List of recent apps (Newest on top)
-                val displayList = recentTargets.take(6)
+                // Recent choices first, then installed starter apps.
+                val displayList = recentTargets.take(10)
                 if (displayList.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -153,6 +156,9 @@ fun RecentShareTargetsSlider(
                     }
                 } else {
                     Column(
+                        modifier = Modifier
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         displayList.forEachIndexed { index, target ->
@@ -227,7 +233,7 @@ fun RecentShareTargetsSlider(
                                                         .padding(horizontal = 4.dp, vertical = 1.dp)
                                                 ) {
                                                     Text(
-                                                        text = "最新",
+                                                        text = "先頭",
                                                         color = Color(0xFF0F172A),
                                                         fontSize = 9.sp,
                                                         fontWeight = FontWeight.Bold
@@ -257,7 +263,7 @@ fun RecentShareTargetsSlider(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
-                            onOpenAllTargetsPicker()
+                            onShareWithOtherApps()
                             onDismiss()
                         },
                     shape = RoundedCornerShape(12.dp),
@@ -278,7 +284,7 @@ fun RecentShareTargetsSlider(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "他のアプリから選択...",
+                            text = "他のアプリに送信",
                             style = MaterialTheme.typography.labelMedium.copy(
                                 color = Color(0xFF0F172A),
                                 fontWeight = FontWeight.SemiBold,
