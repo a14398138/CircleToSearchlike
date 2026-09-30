@@ -48,7 +48,7 @@ class ShareManager private constructor(context: Context) {
     private var usedTextTargets = emptyList<ShareTarget>()
     private var usedImageTargets = emptyList<ShareTarget>()
 
-    // Show these installed share targets until actual choices occupy the three slots.
+    // Show these installed share targets first; used apps accumulate ahead of them.
     private val initialPackages = listOf(
         "com.google.android.apps.bard", // Gemini
         "com.openai.chatgpt",
@@ -58,7 +58,7 @@ class ShareManager private constructor(context: Context) {
     private fun displayedTargets(used: List<ShareTarget>, available: List<ShareTarget>): List<ShareTarget> =
         (used + initialPackages.mapNotNull { pkg -> available.firstOrNull { it.packageName == pkg } })
             .distinctBy { it.packageName }
-            .take(3)
+            .take(10)
 
     init {
         loadPersistedTargets()
